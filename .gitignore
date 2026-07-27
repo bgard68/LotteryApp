@@ -1,0 +1,109 @@
+# ---------- .NET build ----------
+bin/
+obj/
+publish/
+artifacts/
+*.binlog
+
+# ---------- Test & coverage output ----------
+TestResults/
+test-results/
+playwright-report/
+*.trx
+coverage/
+coverage*.json
+coverage*.xml
+coverage*.info
+*.coverage
+
+# ---------- IDE / personal state ----------
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+.vshistory/
+.localhistory/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+# Note: Properties/launchSettings.json is committed ON PURPOSE - ports and
+# profile names only, no secrets; it keeps "dotnet run" identical for everyone.
+
+# ---------- Local database (SQLite) ----------
+# *.db-* catches -shm, -wal AND -journal (rollback-journal pre-image pages
+# are a copy of your data); *.sqlite* variants catch alternate naming.
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+
+# ---------- Angular / Node ----------
+node_modules/
+dist/
+.angular/
+.eslintcache
+*.log
+logs/
+[Ll]og/
+npm-debug.log*
+# No private registry in this project; a root .npmrc is where auth tokens
+# land if npm login is ever run - safer ignored. Re-track deliberately if
+# shared registry config is ever needed.
+.npmrc
+
+# ---------- NuGet ----------
+# Restored packages live in the global cache, not the repo. Only pack
+# output needs ignoring; lock files and nuget.config stay committed.
+*.nupkg
+*.snupkg
+
+# ---------- Config & secrets - never commit real values ----------
+# Committed: appsettings.json (non-secret baseline) and
+# appsettings.Development.json (SQLite path + log levels only).
+# "appsettings.*.json" requires text between the dots, so it never matches
+# appsettings.json itself.
+appsettings.*.json
+!appsettings.Development.json
+.env
+.env.*
+!.env.example
+secrets.json
+local.settings.json
+# JetBrains/VS .http files are committed; their variable store (where
+# tokens go) is not.
+http-client.private.env.json
+
+# ---------- Azure / cloud ----------
+# az CLI + azd state: cached tokens, and azd environment folders whose
+# .env files hold real resolved connection strings
+.azure/
+azureauth.json
+# Database exports/backups are a full copy of your data
+*.bacpac
+*.dacpac
+*.bak
+azure-export/
+# Deploy-time parameter files with real values; the Bicep/ARM templates
+# themselves ARE committed (and are compiled by CI, never into the repo)
+*.parameters.local.json
+parameters.local.json
+# Publish profiles + tooling droppings - endpoints, keys, deploy creds
+*.pubxml
+*.pubxml.user
+PublishProfiles/
+*.publishsettings
+serviceDependencies.json
+serviceDependencies.*.json
+ApplicationInsights.config
+# No zips belong in this repo; deploy zips from publish workflows land at
+# the root, so take the broad rule intentionally
+*.zip
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
