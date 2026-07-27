@@ -27,6 +27,8 @@ export class CheckerStore {
   readonly results = signal<CheckResultDto[] | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+  /** Matches shown per ticket; results stay fully loaded, this only slices the view. */
+  readonly pageSize = signal<number | 'all'>(10);
 
   readonly count = computed(() => this.tickets().length);
 
@@ -79,6 +81,10 @@ export class CheckerStore {
     this.tickets.update((tickets) => tickets.map((t, ti) =>
       ti === ticket ? { ...t, whites: t.whites.map((v, i) => (i === index ? value : v)) } : t));
     this.results.set(null);
+  }
+
+  setPageSize(value: number | 'all'): void {
+    this.pageSize.set(value);
   }
 
   setSpecial(ticket: number, value: number | null): void {

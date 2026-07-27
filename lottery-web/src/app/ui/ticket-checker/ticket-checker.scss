@@ -68,6 +68,22 @@ select, input, button {
 
   .special.pb { border-color: var(--pb-accent); }
   .special.mm { border-color: var(--mm-accent); }
+
+  // After a check, a number that hit in any of this ticket's winning
+  // matches pulses in the ticket row too - same language as the result balls.
+  input.hit {
+    border-color: var(--hit-color);
+    box-shadow: 0 0 0 2px var(--hit-color);
+    animation: input-flash 1s ease-in-out infinite;
+  }
+}
+
+@keyframes input-flash {
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inputs input.hit { animation: none; }
 }
 
 button {
@@ -85,6 +101,17 @@ button {
   border-top: 1px solid var(--card-border);
   margin-top: 0.9rem;
   padding-top: 0.7rem;
+}
+
+.page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+
+  select { padding: 0.25rem 0.4rem; font-size: 0.8rem; }
 }
 
 .ticket-results {

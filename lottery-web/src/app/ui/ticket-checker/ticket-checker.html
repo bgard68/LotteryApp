@@ -42,6 +42,7 @@
               type="number"
               inputmode="numeric"
               [value]="w ?? ''"
+              [class.hit]="isWhiteHit(t, w)"
               (input)="onNumber(t, $index, $any($event.target).value)"
               [attr.aria-label]="'Ticket ' + (t + 1) + ' white ball ' + ($index + 1)"
               min="1"
@@ -51,6 +52,7 @@
             class="special"
             [class.pb]="store.game() === 'powerball'"
             [class.mm]="store.game() === 'megamillions'"
+            [class.hit]="isSpecialHit(t)"
             type="number"
             inputmode="numeric"
             [value]="ticket.special ?? ''"
@@ -72,6 +74,17 @@
 
   @if (store.results(); as results) {
     <div class="results">
+      <label class="page-size">
+        Show
+        <select [value]="store.pageSize()" (change)="onPageSize($any($event.target).value)" aria-label="Matches shown per ticket">
+          <option value="10">10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="all">All</option>
+        </select>
+        matches per ticket
+      </label>
       @for (ticket of store.tickets(); track $index; let t = $index) {
         <div class="ticket-results">
           <p class="muted">
@@ -80,7 +93,7 @@
             {{ (results[t].drawsChecked).toLocaleString() }} drawings
             @if (results[t].historySince) { since {{ results[t].historySince + 'T12:00:00' | date: 'yyyy' }} }
           </p>
-          @for (m of winningMatches(t); track m.drawDate) {
+          @for (m of visibleMatches(t); track m.drawDate) {
             <div class="match">
               <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
               <app-number-balls
@@ -96,6 +109,11 @@
             </div>
           } @empty {
             <p class="muted small">No winning matches - in good company: most tickets never win.</p>
+          }
+          @if (winningMatches(t).length > visibleMatches(t).length) {
+            <p class="muted small">
+              Showing first {{ visibleMatches(t).length }} of {{ winningMatches(t).length }} - use the selector above to see more.
+            </p>
           }
         </div>
       }

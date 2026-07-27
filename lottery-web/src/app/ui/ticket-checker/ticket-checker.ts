@@ -47,4 +47,26 @@ export class TicketChecker {
   protected winningMatches(ticketIndex: number): TicketMatchDto[] {
     return this.store.results()?.[ticketIndex]?.matches ?? [];
   }
+
+  /** Slice per the "show per ticket" selector; results stay fully loaded. */
+  protected visibleMatches(ticketIndex: number): TicketMatchDto[] {
+    const matches = this.winningMatches(ticketIndex);
+    const size = this.store.pageSize();
+    return size === 'all' ? matches : matches.slice(0, size);
+  }
+
+  protected onPageSize(raw: string): void {
+    this.store.setPageSize(raw === 'all' ? 'all' : Number(raw));
+  }
+
+  /** After a check, a ticket input flashes when that number hit in ANY of its winning matches. */
+  protected isWhiteHit(ticketIndex: number, value: number | null): boolean {
+    if (value == null || !this.store.results()) return false;
+    return this.winningMatches(ticketIndex).some((m) => m.drawnWhiteBalls.includes(value));
+  }
+
+  protected isSpecialHit(ticketIndex: number): boolean {
+    if (!this.store.results()) return false;
+    return this.winningMatches(ticketIndex).some((m) => m.specialMatched);
+  }
 }

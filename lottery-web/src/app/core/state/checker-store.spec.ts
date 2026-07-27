@@ -89,6 +89,14 @@ describe('CheckerStore', () => {
     expect(store.results()?.length).toBe(2);
   });
 
+  it('pageSize defaults to 10 and accepts all', () => {
+    expect(store.pageSize()).toBe(10);
+    store.setPageSize('all');
+    expect(store.pageSize()).toBe('all');
+    store.setPageSize(50);
+    expect(store.pageSize()).toBe(50);
+  });
+
   it('an unreachable backend produces an actionable message', async () => {
     api.generateError = new ApiUnreachableError();
     await store.generate();
