@@ -35,11 +35,14 @@ so handler rotation keeps working:
 - **`MegaMillionsJackpotFeed`** - megamillions.com's XML-wrapped JSON service:
   last drawing's jackpot + winner count (rollover) and the next estimate/cash
   value. Parsed defensively; any shape change degrades to null.
-- **`PowerballJackpotFeed`** - best-effort only: powerball.com retired its
-  public JSON API (the route now serves the SPA behind bot protection), so
-  this adapter returns null unless MUSL restores the endpoint, and Powerball
-  jackpot amounts stay hidden in the UI.
-- **`CompositeJackpotFeed`** routes each game to its adapter.
+- **`NyLotteryJackpotFeed`** - the NY Lottery site API
+  (`nylottery.ny.gov/nyl-api`): the primary Powerball jackpot source
+  (estimate + cash value, matches powerball.com's display).
+- **`PowerballJackpotFeed`** - fallback only: powerball.com retired its
+  public JSON API (the route now serves the SPA behind bot protection); this
+  adapter returns null unless MUSL restores the endpoint.
+- **`CompositeJackpotFeed`** routes each game through its source chain,
+  first success wins.
 
 Feed failures are *reported, never thrown* - `RefreshGame` records the error
 and the app keeps serving whatever it has. Endpoint URLs, payload shapes, and

@@ -131,13 +131,12 @@ and failure modes: [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md). Summary:
   `SocrataWinningNumbersFeed` - incremental "everything after the latest stored
   draw", which doubles as gap-repair after downtime.
 - **Jackpot amounts**: **megamillions.com**'s JSON service provides Mega
-  Millions estimates, cash values, and rollover status (fully working).
-  **powerball.com retired its public JSON API** (the old route now serves the
-  SPA behind bot protection), so Powerball jackpot amounts are null and the UI
-  hides them - the graceful-degradation path the design planned for, with a
-  best-effort adapter kept in place should MUSL restore an endpoint. Draw
-  *dates* never depend on any feed: the schedule math computes them. No HTML
-  scraping, ever - layout changes break scrapers.
+  Millions estimates, cash values, and rollover status; the **NY Lottery site
+  API** (`nylottery.ny.gov/nyl-api`) provides Powerball's estimate and cash
+  value (powerball.com retired its own public JSON API - it remains only as a
+  fallback in the source chain). If every source fails, amounts go null and
+  the UI hides them. Draw *dates* never depend on any feed: the schedule math
+  computes them. No HTML scraping, ever - layout changes break scrapers.
 - **Rule changes are data, not code**: `RuleEras` records every documented
   matrix change (7 Powerball eras back to 1992, 5 Mega Millions eras). Every
   imported draw is validated against its era; a test validates the entire

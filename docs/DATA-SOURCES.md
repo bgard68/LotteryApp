@@ -10,7 +10,8 @@ failure modes, and the token story. Back to the [main README](../README.md).
 | Historical winning numbers | NY Open Data (Socrata) | `data.ny.gov/resource/{dataset}.json` | Working; also captured as committed snapshots |
 | New drawings (ongoing) | Same Socrata datasets | Same, filtered by date | Working |
 | Mega Millions jackpots | megamillions.com utility service | `GetLatestDrawData` | Working |
-| Powerball jackpots | powerball.com API | `/api/v1/estimates/powerball` | **Retired by MUSL** - degrades to null |
+| Powerball jackpots | **NY Lottery site API** | `nylottery.ny.gov/nyl-api/games/powerball/draws` | Working (primary) |
+| Powerball jackpots (fallback) | powerball.com API | `/api/v1/estimates/powerball` | **Retired by MUSL** - kept as best-effort fallback |
 | Next draw dates | *No feed at all* | Computed by `DrawSchedule` | Always works |
 
 Two rules govern every source: **no HTML scraping, ever** (layout changes break
@@ -125,7 +126,37 @@ the adapter parses defensively and any shape change degrades to null rather
 than throwing. A contract test pins the recorded real payload so a silent
 change breaks CI, not production.
 
-## powerball.com - jackpots (retired; graceful degradation in action)
+## NY Lottery site API - Powerball jackpots (primary)
+
+```
+GET https://nylottery.ny.gov/nyl-api/games/powerball/draws
+```
+
+The API behind nylottery.ny.gov's own game pages - government-run, structured
+JSON, no bot protection. The upcoming-draw entry carries exactly what the
+Powerball card needs, and the figures match powerball.com's display:
+
+```json
+{ "data": { "draws": [
+  { "drawTime": 1785124800000, "estimatedJackpot": 633000000,
+    "jackpots": [{ "amount": 633000000, "cashAmount": 277300000 }],
+    "gameName": "powerball", "drawNumber": 1978 },
+  { "drawTime": 1784952000000, "drawNumber": 1977,
+    "results": [{ "primary": ["3","4","24","36","47"], "secondary": ["17"] }] }
+]}}
+```
+
+- `estimatedJackpot` / `jackpots[0].cashAmount` -> the card's estimate + cash
+  value (persisted to `JackpotEstimates` by the refresh cycle).
+- The payload also carries past results - unused (winning numbers come from
+  the Socrata datasets), but a useful cross-check.
+- Undocumented like the other site APIs, so: defensive parsing, null on any
+  shape change, contract test pinning the recorded payload.
+- Last-draw jackpot amount / rollover status are not in this payload, so the
+  Powerball card omits the "rolled over" line (Mega Millions keeps it - its
+  feed is richer).
+
+## powerball.com - jackpots (retired; now the fallback)
 
 The design named `https://www.powerball.com/api/v1/estimates/powerball?_format=json`
 as the Powerball jackpot source. During Phase 2 build-out, probing revealed
@@ -133,18 +164,19 @@ MUSL has **retired the public API**: the route now returns the SPA homepage,
 the page is server-rendered (no XHR data call to adopt instead), and the site
 sits behind bot protection that blanks non-browser clients.
 
-What happens as a result - by design, not accident:
+The NY Lottery API above now fills the gap as the primary source; this
+adapter remains in the chain as a just-in-case fallback (first-success wins in
+`CompositeJackpotFeed`), and the graceful-degradation path still applies if
+*both* sources fail:
 
-- **Draw dates and countdowns are unaffected** - they come from `DrawSchedule`
-  math, never from a feed.
-- **Powerball jackpot amounts are `null`** end-to-end (`estimatedJackpot`,
-  `cashValue`, `jackpotAmount` in the API responses), and the UI simply hides
-  them. Numbers, checking, and generation are all fully functional.
-- `PowerballJackpotFeed` remains as a **best-effort adapter**: it attempts the
-  endpoint, treats anything that isn't clean JSON as "unavailable", and knows
-  how to parse the old payload shape (`"$633 Million"` money strings included)
-  should MUSL restore it. Contract tests cover both the HTML-degradation path
-  and the historical JSON shape.
+- **Draw dates and countdowns are never affected** - they come from
+  `DrawSchedule` math, not from any feed.
+- With both sources down, Powerball jackpot amounts go `null` and the UI
+  hides them; numbers, checking, and generation stay fully functional.
+- `PowerballJackpotFeed` treats anything that isn't clean JSON as
+  "unavailable" and still knows the old payload shape (`"$633 Million"` money
+  strings included) should MUSL restore it. Contract tests cover the
+  HTML-degradation path, the historical JSON shape, and the NY payload.
 
 Full story: [lessons learned #8](LESSONS-LEARNED.md#8-the-undocumented-endpoint-risk-materialized---before-a-line-of-feed-code-was-written-phase-2).
 

@@ -124,6 +124,15 @@ works fully and supplies estimate, cash value, and rollover status.
 discovery cost an hour, not a redesign. Probe sources *before* building
 against them.
 
+**Postscript:** a replacement source surfaced by probing sibling government
+sites: the NY Lottery's own site API
+(`nylottery.ny.gov/nyl-api/games/powerball/draws`) serves the estimated
+jackpot and cash value as clean JSON, matching powerball.com's display
+exactly. It is now the primary Powerball jackpot source, with the retired
+MUSL adapter demoted to fallback. Second lesson: when an official API dies,
+check the *state lottery sites* that display the same numbers - one of them
+is usually serving JSON to its own frontend without bot protection.
+
 ## 9. Windows PowerShell can't decompress modern web responses
 
 **Symptom:** probing endpoints with `Invoke-WebRequest`/`Invoke-RestMethod`
