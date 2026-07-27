@@ -12,15 +12,17 @@ builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
 builder.Services.AddHostedService<DrawRefreshService>();
 
-// Public anonymous API: modest per-client ceiling so a scraper cannot run up
-// compute; generous enough that no human ever notices.
+// Public anonymous API: per-client ceiling so a scraper cannot run up compute.
+// 120/min default - a multi-ticket check is up to 10 calls, so an active human
+// clicking around stays well under it; override via RateLimit:PermitPerMinute.
+var permitPerMinute = builder.Configuration.GetValue("RateLimit:PermitPerMinute", 120);
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = permitPerMinute, Window = TimeSpan.FromMinutes(1) }));
 });
 
 var app = builder.Build();
