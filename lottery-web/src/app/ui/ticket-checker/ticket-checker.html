@@ -3,41 +3,47 @@
   <p class="muted">Generate up to {{ maxTickets }} tickets, or enter your own, then check them against every past drawing.</p>
 
   <div class="controls">
-    <select [value]="store.game()" (change)="store.setGame($any($event.target).value)" aria-label="Game">
-      @for (g of games; track g.game) {
-        <option [value]="g.game">{{ g.name }}</option>
-      }
-    </select>
+    <fieldset class="panel">
+      <legend>Generate</legend>
+      <select [value]="store.game()" (change)="store.setGame($any($event.target).value)" aria-label="Game">
+        @for (g of games; track g.game) {
+          <option [value]="g.game">{{ g.name }}</option>
+        }
+      </select>
 
-    <label class="count">
-      Tickets
-      <input
-        type="number"
-        [min]="minTickets"
-        [max]="maxTickets"
-        [value]="store.count()"
-        (change)="onCount($any($event.target).value)"
-        aria-label="Number of tickets" />
-    </label>
-
-    <button (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
-
-    @if (store.count() > 1) {
-      <label class="which">
-        Check
-        <select
-          [value]="store.selectedTicket()"
-          (change)="onSelectedTicket($any($event.target).value)"
-          aria-label="Which ticket to check">
-          <option value="all">All tickets</option>
-          @for (ticket of store.tickets(); track $index; let t = $index) {
-            <option [value]="t">Ticket {{ t + 1 }}</option>
-          }
-        </select>
+      <label class="count">
+        Tickets
+        <input
+          type="number"
+          [min]="minTickets"
+          [max]="maxTickets"
+          [value]="store.count()"
+          (change)="onCount($any($event.target).value)"
+          aria-label="Number of tickets" />
       </label>
-    }
 
-    <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
+      <button (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
+    </fieldset>
+
+    <fieldset class="panel">
+      <legend>Check</legend>
+      @if (store.count() > 1) {
+        <label class="which">
+          Ticket
+          <select
+            [value]="store.selectedTicket()"
+            (change)="onSelectedTicket($any($event.target).value)"
+            aria-label="Which ticket to check">
+            <option value="all">All tickets</option>
+            @for (ticket of store.tickets(); track $index; let t = $index) {
+              <option [value]="t">Ticket {{ t + 1 }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
+    </fieldset>
   </div>
 
   @if (store.era(); as era) {
@@ -88,6 +94,25 @@
 
   @if (store.results(); as results) {
     <div class="results">
+      @if (bigWins().length > 0) {
+        <div class="big-wins" role="status">
+          <p class="big-title">
+            Big win{{ bigWins().length > 1 ? 's' : '' }} - 3 or more numbers plus the {{ specialName() }}
+          </p>
+          @for (w of bigWins(); track $index) {
+            <div class="big-row">
+              <span>
+                @if (store.count() > 1) { Ticket {{ w.ticket + 1 }} · }
+                {{ w.match.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}
+              </span>
+              <span class="big-tier">
+                {{ w.match.tier }} ·
+                @if (w.match.isJackpot) { JACKPOT } @else { {{ formatJackpot(w.match.approximateAmount) }} }
+              </span>
+            </div>
+          }
+        </div>
+      }
       <label class="page-size">
         Show
         <select [value]="store.pageSize()" (change)="onPageSize($any($event.target).value)" aria-label="Matches shown per ticket">

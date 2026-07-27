@@ -62,4 +62,21 @@ export class TicketChecker {
   protected onSelectedTicket(raw: string): void {
     this.store.setSelectedTicket(raw === 'all' ? 'all' : Number(raw));
   }
+
+  protected specialName(): string {
+    return this.store.game() === 'powerball' ? 'Powerball' : 'Mega Ball';
+  }
+
+  /** Matches worth shouting about: 3+ whites AND the special ball. Hidden when none. */
+  protected bigWins(): { ticket: number; match: TicketMatchDto }[] {
+    const results = this.store.results();
+    if (!results) return [];
+    const wins: { ticket: number; match: TicketMatchDto }[] = [];
+    results.forEach((result, ticket) => {
+      result?.matches.forEach((match) => {
+        if (match.whiteMatches >= 3 && match.specialMatched) wins.push({ ticket, match });
+      });
+    });
+    return wins;
+  }
 }
