@@ -23,8 +23,10 @@ export class CheckerStore {
   readonly game = signal<Game>('powerball');
   readonly tickets = signal<TicketDraft[]>([emptyTicket()]);
   readonly era = signal<RuleEraDto | null>(null);
-  /** Parallel to tickets; null until a check has run. */
-  readonly results = signal<CheckResultDto[] | null>(null);
+  /** Which ticket to check and show: a zero-based index, or every ticket. */
+  readonly selectedTicket = signal<number | 'all'>('all');
+  /** Parallel to tickets; null until a check has run; unselected tickets stay null. */
+  readonly results = signal<(CheckResultDto | null)[] | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
   /** Matches shown per ticket; results stay fully loaded, this only slices the view. */
@@ -32,12 +34,19 @@ export class CheckerStore {
 
   readonly count = computed(() => this.tickets().length);
 
+  isSelected(index: number): boolean {
+    const selected = this.selectedTicket();
+    return selected === 'all' || selected === index;
+  }
+
   /** Client-side validation mirrors the server's (which stays authoritative). */
   readonly validationError = computed<string | null>(() => {
     const era = this.era();
     if (!era) return null;
+    const selected = this.selectedTicket();
 
     for (const [index, ticket] of this.tickets().entries()) {
+      if (selected !== 'all' && selected !== index) continue;
       const filled = ticket.whites.filter((w): w is number => w != null);
       if (filled.length < 5 || ticket.special == null) continue; // incomplete, not invalid
       const label = this.tickets().length > 1 ? `Ticket ${index + 1}: ` : '';
@@ -50,8 +59,9 @@ export class CheckerStore {
     return null;
   });
 
-  readonly allComplete = computed(() =>
-    this.tickets().every((t) => t.special != null && t.whites.every((w) => w != null)));
+  readonly allComplete = computed(() => this.tickets()
+    .filter((_, i) => this.isSelected(i))
+    .every((t) => t.special != null && t.whites.every((w) => w != null)));
 
   readonly canCheck = computed(() =>
     !this.busy() && this.allComplete() && this.validationError() === null);
@@ -74,6 +84,14 @@ export class CheckerStore {
       while (next.length < count) next.push(emptyTicket());
       return next;
     });
+    // A selection pointing past the new count would silently check nothing.
+    const selected = this.selectedTicket();
+    if (selected !== 'all' && selected >= count) this.selectedTicket.set('all');
+    this.results.set(null);
+  }
+
+  setSelectedTicket(value: number | 'all'): void {
+    this.selectedTicket.set(value);
     this.results.set(null);
   }
 
@@ -106,8 +124,10 @@ export class CheckerStore {
     const game = this.game();
     const tickets = this.tickets();
     await this.run(async () => {
-      const results = await Promise.all(tickets.map((t) =>
-        this.api.check(game, t.whites as number[], t.special as number)));
+      const results = await Promise.all(tickets.map((t, i) =>
+        this.isSelected(i)
+          ? this.api.check(game, t.whites as number[], t.special as number)
+          : Promise.resolve<CheckResultDto | null>(null)));
       this.results.set(results);
     });
   }

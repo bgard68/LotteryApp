@@ -89,6 +89,36 @@ describe('CheckerStore', () => {
     expect(store.results()?.length).toBe(2);
   });
 
+  it('selecting one ticket checks only that ticket', async () => {
+    store.setCount(3);
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    fillTicket(1, [1, 2, 3, 4, 5], 6);
+    fillTicket(2, [10, 20, 30, 40, 50], 7);
+    store.setSelectedTicket(1);
+
+    await store.check();
+
+    expect(api.checkCalls).toEqual([{ game: 'powerball', whites: [1, 2, 3, 4, 5], special: 6 }]);
+    expect(store.results()![0]).toBeNull();
+    expect(store.results()![1]).not.toBeNull();
+    expect(store.results()![2]).toBeNull();
+  });
+
+  it('a selected ticket only needs ITSELF complete and valid', () => {
+    store.setCount(2);
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    // ticket 2 left empty - selecting ticket 1 must still allow checking
+    store.setSelectedTicket(0);
+    expect(store.canCheck()).toBeTrue();
+  });
+
+  it('shrinking the count resets an out-of-range selection to all', () => {
+    store.setCount(3);
+    store.setSelectedTicket(2);
+    store.setCount(2);
+    expect(store.selectedTicket()).toBe('all');
+  });
+
   it('pageSize defaults to 10 and accepts all', () => {
     expect(store.pageSize()).toBe(10);
     store.setPageSize('all');

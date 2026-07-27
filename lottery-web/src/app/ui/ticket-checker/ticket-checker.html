@@ -21,6 +21,22 @@
     </label>
 
     <button (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
+
+    @if (store.count() > 1) {
+      <label class="which">
+        Check
+        <select
+          [value]="store.selectedTicket()"
+          (change)="onSelectedTicket($any($event.target).value)"
+          aria-label="Which ticket to check">
+          <option value="all">All tickets</option>
+          @for (ticket of store.tickets(); track $index; let t = $index) {
+            <option [value]="t">Ticket {{ t + 1 }}</option>
+          }
+        </select>
+      </label>
+    }
+
     <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
   </div>
 
@@ -84,36 +100,38 @@
         matches per ticket
       </label>
       @for (ticket of store.tickets(); track $index; let t = $index) {
-        <div class="ticket-results">
-          <p class="muted">
-            @if (store.count() > 1) { Ticket {{ t + 1 }} · }
-            {{ winningMatches(t).length }} winning match(es) across
-            {{ (results[t].drawsChecked).toLocaleString() }} drawings
-            @if (results[t].historySince) { since {{ results[t].historySince + 'T12:00:00' | date: 'yyyy' }} }
-          </p>
-          @for (m of visibleMatches(t); track m.drawDate) {
-            <div class="match">
-              <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
-              <app-number-balls
-                [whites]="$any(ticket.whites)"
-                [special]="ticket.special ?? 0"
-                [accent]="accent()"
-                [matchedWhites]="matchedWhites(ticket, m)"
-                [specialMatched]="m.specialMatched" />
-              <span class="tier">
-                {{ m.tier }} ·
-                @if (m.isJackpot) { Jackpot } @else { {{ formatJackpot(m.approximateAmount) }} }
-              </span>
-            </div>
-          } @empty {
-            <p class="muted small">No winning matches - in good company: most tickets never win.</p>
-          }
-          @if (winningMatches(t).length > visibleMatches(t).length) {
-            <p class="muted small">
-              Showing first {{ visibleMatches(t).length }} of {{ winningMatches(t).length }} - use the selector above to see more.
+        @if (results[t]; as result) {
+          <div class="ticket-results">
+            <p class="muted">
+              @if (store.count() > 1) { Ticket {{ t + 1 }} · }
+              {{ winningMatches(t).length }} winning match(es) across
+              {{ result.drawsChecked.toLocaleString() }} drawings
+              @if (result.historySince) { since {{ result.historySince + 'T12:00:00' | date: 'yyyy' }} }
             </p>
-          }
-        </div>
+            @for (m of visibleMatches(t); track m.drawDate) {
+              <div class="match">
+                <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
+                <app-number-balls
+                  [whites]="$any(ticket.whites)"
+                  [special]="ticket.special ?? 0"
+                  [accent]="accent()"
+                  [matchedWhites]="matchedWhites(ticket, m)"
+                  [specialMatched]="m.specialMatched" />
+                <span class="tier">
+                  {{ m.tier }} ·
+                  @if (m.isJackpot) { Jackpot } @else { {{ formatJackpot(m.approximateAmount) }} }
+                </span>
+              </div>
+            } @empty {
+              <p class="muted small">No winning matches - in good company: most tickets never win.</p>
+            }
+            @if (winningMatches(t).length > visibleMatches(t).length) {
+              <p class="muted small">
+                Showing first {{ visibleMatches(t).length }} of {{ winningMatches(t).length }} - use the selector above to see more.
+              </p>
+            }
+          </div>
+        }
       }
       <p class="hint">
         Flashing numbers are the ones that matched that drawing. Prize amounts are today's

@@ -34,6 +34,14 @@ select, input, button {
   input { width: 3.4rem; text-align: center; }
 }
 
+.which {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .tickets {
   display: flex;
   flex-direction: column;

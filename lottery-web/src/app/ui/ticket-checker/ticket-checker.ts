@@ -58,4 +58,8 @@ export class TicketChecker {
   protected onPageSize(raw: string): void {
     this.store.setPageSize(raw === 'all' ? 'all' : Number(raw));
   }
+
+  protected onSelectedTicket(raw: string): void {
+    this.store.setSelectedTicket(raw === 'all' ? 'all' : Number(raw));
+  }
 }
