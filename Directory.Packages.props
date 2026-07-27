@@ -2,9 +2,9 @@
   <ItemGroup>
     <PackageVersion Include="Dapper" Version="2.1.66" />
     <PackageVersion Include="dbup-sqlite" Version="6.0.4" />
-    <PackageVersion Include="dbup-sqlserver" Version="6.0.16" />
+    <PackageVersion Include="dbup-sqlserver" Version="7.2.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.1" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.4" />
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
     <!-- Transitive-vulnerability lifts: newer patched versions of packages pulled
