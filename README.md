@@ -15,7 +15,7 @@ past drawings do not predict future ones. Verify any win with the official lotte
 | Migrations | DbUp, embedded per-provider SQL scripts |
 | Database | SQLite (local dev) / Azure SQL serverless (production) |
 | Time | .NET `TimeProvider` ([why](#timeprovider-vs-idatetimeprovider)) |
-| Frontend | Angular (Phase 3, planned) |
+| Frontend | Angular 20 - lives on the **`frontend` branch** (`lottery-web/`), never merged into `main` |
 | Hosting | Azure Static Web Apps + App Service (Phase 4, planned) |
 | Packages | Central Package Management (`Directory.Packages.props`) + committed lock files |
 

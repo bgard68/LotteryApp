@@ -46,6 +46,7 @@ node_modules/
 dist/
 .angular/
 .eslintcache
+*.tsbuildinfo
 *.log
 logs/
 [Ll]og/
