@@ -1,6 +1,6 @@
-# Tests
+﻿# Tests
 
-66 tests across three projects, one per layer. Run with `dotnet test`.
+68 tests across three projects, one per layer. Run with `dotnet test`.
 
 Back to the [main README](../../README.md).
 
@@ -38,7 +38,7 @@ Pending test advances the clock past a drawing in microseconds):
   era-invalid feed rows are skipped; jackpot info saves the estimate and
   stamps the stored draw.
 
-## Lottery.Infrastructure.Tests (23)
+## Lottery.Infrastructure.Tests (25)
 
 Against a **real SQLite database** (temp file, migrated by DbUp per test class)
 - with Dapper the SQL is the logic, so mocking the connection would test

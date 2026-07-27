@@ -1,10 +1,10 @@
-# Scripts
+﻿# Scripts
 
 Back to the [main README](../../README.md).
 
 ## smoke-test.ps1
 
-End-to-end verification of a **running** API - 23 checks covering every
+End-to-end verification of a **running** API - 27 checks covering every
 endpoint, both games, happy paths **and error conditions**:
 
 - Health first (`/healthz`) - fail fast if the stack is down.
