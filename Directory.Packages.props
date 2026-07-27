@@ -10,7 +10,7 @@
     <!-- Transitive-vulnerability lifts: newer patched versions of packages pulled
          in by Microsoft.Data.Sqlite and Microsoft.AspNetCore.OpenApi. -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.4" />
-    <PackageVersion Include="Microsoft.OpenApi" Version="2.11.0" />
+    <PackageVersion Include="Microsoft.OpenApi" Version="3.9.0" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.0.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
