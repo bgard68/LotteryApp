@@ -13,6 +13,7 @@ public enum CheckStatus
 }
 
 public sealed record TicketMatch(DateOnly DrawDate, int WhiteMatches, bool SpecialMatched,
+    IReadOnlyList<int> DrawnWhiteBalls, int DrawnSpecial,
     string TierName, decimal? ApproximateAmount, bool IsJackpot);
 
 public sealed record CheckResult(
@@ -52,6 +53,7 @@ public sealed class CheckTicket(IDrawRepository draws, TimeProvider time)
             .Where(x => x.Tier is not null)
             .OrderByDescending(x => x.Row.DrawDate)
             .Select(x => new TicketMatch(x.Row.DrawDate, x.Row.WhiteMatches, x.Row.SpecialMatched,
+                x.Row.DrawnWhiteBalls, x.Row.DrawnSpecial,
                 x.Tier!.Name, x.Tier.ApproximateAmount, x.Tier.IsJackpot))
             .ToList();
 

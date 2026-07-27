@@ -78,6 +78,8 @@ public sealed class SqliteRepositoryTests : IDisposable
         Assert.Equal(new DateOnly(2026, 7, 25), row.DrawDate);
         Assert.Equal(3, row.WhiteMatches);
         Assert.True(row.SpecialMatched);
+        Assert.Equal([7, 19, 33, 51, 64], row.DrawnWhiteBalls);
+        Assert.Equal(18, row.DrawnSpecial);
     }
 
     [Fact]

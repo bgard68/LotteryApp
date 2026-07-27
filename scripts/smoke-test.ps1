@@ -72,6 +72,7 @@ foreach ($game in @("powerball", "megamillions")) {
     Assert-Api "$game draws"      "/api/$game/draws?limit=5" 200 "whiteBalls"
     Assert-Api "$game rule-eras"  "/api/$game/rule-eras"  200 "whiteBallMax"
     Assert-Api "$game generate"   "/api/$game/generate"   200 "whiteBalls"
+    Assert-Api "$game generate x5" "/api/$game/generate?count=5" 200 "tickets"
 }
 Assert-Api "powerball check (winless ticket ok)" "/api/powerball/check?whites=1,2,3,4,5&special=1" 200 "drawsChecked"
 Assert-Api "megamillions check ok" "/api/megamillions/check?whites=10,20,30,40,50&special=10" 200 "drawsChecked"
@@ -86,6 +87,8 @@ Assert-Api "check white out of era -> 400"  "/api/powerball/check?whites=1,2,3,4
 Assert-Api "check special out of era -> 400" "/api/powerball/check?whites=1,2,3,4,5&special=27" 400 "between 1 and 26"
 Assert-Api "check non-numeric white -> 400" "/api/powerball/check?whites=1,2,3,4,abc&special=5" 400 "not a number"
 Assert-Api "mm special out of era -> 400"   "/api/megamillions/check?whites=1,2,3,4,5&special=25" 400 "between 1 and 24"
+Assert-Api "generate count 0 -> 400"        "/api/powerball/generate?count=0" 400 "between 1 and 10"
+Assert-Api "generate count 11 -> 400"       "/api/powerball/generate?count=11" 400 "between 1 and 10"
 
 # --- Refresh trigger (Phase 2) - always 200; feed failures are reported in-body ---
 Assert-Api "internal refresh" "/internal/refresh" 200 "upToDate" -Method POST

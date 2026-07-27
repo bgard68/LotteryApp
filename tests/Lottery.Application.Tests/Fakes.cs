@@ -26,9 +26,10 @@ public sealed class FakeDrawRepository : IDrawRepository
     public Task<IReadOnlyList<MatchRow>> FindMatchesAsync(Game game, IReadOnlyList<int> whites, int special, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<MatchRow>>(Draws
             .Where(d => d.Game == game)
-            .Select(d => TicketMatcher.Match(d, whites, special))
-            .Where(m => m.WhiteMatches > 0 || m.SpecialMatched)
-            .Select(m => new MatchRow(m.DrawDate, m.WhiteMatches, m.SpecialMatched))
+            .Select(d => (Draw: d, Match: TicketMatcher.Match(d, whites, special)))
+            .Where(x => x.Match.WhiteMatches > 0 || x.Match.SpecialMatched)
+            .Select(x => new MatchRow(x.Match.DrawDate, x.Draw.WhiteBalls, x.Draw.Special,
+                x.Match.WhiteMatches, x.Match.SpecialMatched))
             .ToList());
 
     public Task<bool> UpsertAsync(Draw draw, CancellationToken ct)
