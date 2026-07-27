@@ -119,6 +119,9 @@ This is a recorded decision - please don't add it out of habit.
 
 ## Data: where numbers come from
 
+Full deep-dive - exact endpoints, payload shapes, the Socrata token, quirks,
+and failure modes: [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md). Summary:
+
 - **Historical numbers**: committed JSON snapshots in
   `src/Lottery.Infrastructure/Seeding/Data/`, captured from the **NY Open Data**
   (Socrata) public datasets - Powerball `d6yy-54nr` (1,971 draws since 2010),
@@ -161,8 +164,10 @@ Enabled on this repo before any code was pushed (and verifiable in Settings):
 - **Zero-secrets design** - there are no secrets in this repo at all: local dev
   is SQLite (no credentials), production uses Azure Managed Identity (no SQL
   password exists) and Key Vault; deploys will use GitHub OIDC (no stored
-  deploy credential). The only optional secret (a Socrata rate-limit token)
-  lives in `dotnet user-secrets`, outside the repo tree.
+  deploy credential). The only optional secret (a Socrata rate-limit token -
+  [what it is and how to set it](docs/DATA-SOURCES.md#the-socrata-app-token-optional---and-the-app-runs-fine-without-one))
+  lives in `dotnet user-secrets`, outside the repo tree. The refresh trigger's
+  optional `Refresh:Key` follows the same rule: environment only, never a file.
 
 ## Files ignored and why
 

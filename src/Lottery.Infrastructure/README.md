@@ -42,7 +42,8 @@ so handler rotation keeps working:
 - **`CompositeJackpotFeed`** routes each game to its adapter.
 
 Feed failures are *reported, never thrown* - `RefreshGame` records the error
-and the app keeps serving whatever it has.
+and the app keeps serving whatever it has. Endpoint URLs, payload shapes, and
+quirks: [docs/DATA-SOURCES.md](../../docs/DATA-SOURCES.md).
 
 ## Seeding (`Seeding/`)
 
