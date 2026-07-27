@@ -178,3 +178,43 @@ through `IServiceScopeFactory`.
 home page. The workflows doc lives at `.github/workflows/README.md` instead.
 **Lesson:** never place a README directly in `.github/` unless you intend it
 to be the repo's displayed README.
+
+## 13. Vite's dev proxy reports a dead backend as 500-with-empty-body (Phase 3)
+
+**Symptom (user-reported):** clicking "Generate picks" in the Angular app
+showed a generic "Something went wrong - try again". The API endpoint itself
+was fine - the .NET backend simply wasn't running while the frontend dev
+server was.
+
+**Cause, two layers deep:** (1) local dev is a two-process setup (Angular dev
+server + API) and nothing surfaced that the second process was down; (2) when
+its proxy target refuses connections, Angular's Vite-based dev server responds
+**HTTP 500 with an empty body** - not the 502/504 a classic gateway returns -
+so a naive "is this a gateway error?" status check misclassifies it as a real
+server error, and the store's generic catch hid the root cause.
+
+**Fix:** the HTTP adapter classifies status 0, 502, 503, 504, *and*
+500-with-empty-body (a real API 500 always carries a problem-details body)
+into a typed `ApiUnreachableError`; the stores map it to "Can't reach the
+lottery API. If you're running locally, start the backend first." Spec-covered,
+and verified live in both states. Troubleshooting documented in
+`lottery-web/README.md`.
+**Lesson:** never collapse transport failures and server failures into one
+generic catch - classify at the adapter (the only layer that knows HTTP), and
+learn your dev proxy's actual failure signature by observing it, not assuming
+gateway conventions.
+
+## 14. PowerShell 5.1 mangles embedded double quotes in native command arguments
+
+**Symptom:** `git commit -m @'...'@` with a here-string containing a quoted
+phrase ("Something went wrong") failed bizarrely - git saw the message split
+into multiple pathspec arguments.
+
+**Cause:** Windows PowerShell 5.1's native-argument encoding re-quotes
+arguments containing embedded double quotes incorrectly, splitting the
+here-string at the quotes.
+
+**Fix:** write the message to a temp file and use `git commit -F <file>` -
+immune to every quoting rule.
+**Lesson:** for multi-line native-command input containing quotes in PS 5.1,
+pass a file, not an argument.
