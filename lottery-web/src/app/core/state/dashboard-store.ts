@@ -1,7 +1,7 @@
-import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
+﻿import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { Countdown, countdownTo } from '../domain/countdown';
 import { GAMES, Game, GameMeta } from '../domain/game';
-import { LatestDrawDto, LotteryApi, NextDrawDto } from '../ports/lottery-api';
+import { ApiUnreachableError, LatestDrawDto, LotteryApi, NextDrawDto } from '../ports/lottery-api';
 import { CLOCK } from '../ports/clock';
 
 export interface GameCardView {
@@ -57,8 +57,11 @@ export class DashboardStore {
       // shortly after so the card flips to Pending/Published on its own.
       const msToDraw = Date.parse(next.drawTimeUtc) - this.clock();
       if (msToDraw > 0) setTimeout(() => void this.load(game), msToDraw + 30_000);
-    } catch {
-      this.errors.update((m) => ({ ...m, [game]: 'Could not load drawing data.' }));
+    } catch (e) {
+      const message = e instanceof ApiUnreachableError
+        ? "Can't reach the lottery API. If you're running locally, start the backend first."
+        : 'Could not load drawing data.';
+      this.errors.update((m) => ({ ...m, [game]: message }));
     } finally {
       this.loadedGames.update((s) => new Set(s).add(game));
     }

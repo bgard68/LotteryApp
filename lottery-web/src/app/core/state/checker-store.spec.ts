@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CheckerStore } from './checker-store';
 import { FakeLotteryApi } from './fake-lottery-api';
-import { LotteryApi } from '../ports/lottery-api';
+import { ApiUnreachableError, LotteryApi } from '../ports/lottery-api';
 
 describe('CheckerStore', () => {
   let store: CheckerStore;
@@ -58,5 +58,17 @@ describe('CheckerStore', () => {
     await store.generate();
     expect(store.whites()).toEqual([7, 19, 33, 51, 64]);
     expect(store.special()).toBe(18);
+  });
+
+  it('an unreachable backend produces an actionable message', async () => {
+    api.generateError = new ApiUnreachableError();
+    await store.generate();
+    expect(store.error()).toContain('start the backend');
+  });
+
+  it('other failures keep the generic message', async () => {
+    api.generateError = new Error('boom');
+    await store.generate();
+    expect(store.error()).toContain('Something went wrong');
   });
 });

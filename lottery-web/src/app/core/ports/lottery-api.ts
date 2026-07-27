@@ -1,6 +1,18 @@
 import type { Game } from '../domain/game';
 
 /**
+ * Thrown by adapters when the backend cannot be reached at all (network
+ * failure or dev-proxy 502/503/504), as opposed to the backend answering
+ * with an error. Stores use it to show an actionable message instead of a
+ * generic one - locally this almost always means "the API isn't running".
+ */
+export class ApiUnreachableError extends Error {
+  constructor() {
+    super('The lottery API is unreachable.');
+  }
+}
+
+/**
  * DTO shapes mirror the backend contract; the generated OpenAPI types in
  * core/api/schema.d.ts are the source-of-truth reference (a CI check keeps
  * them regenerated), and these interfaces are the ergonomic named views the

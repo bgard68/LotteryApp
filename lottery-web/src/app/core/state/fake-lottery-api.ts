@@ -42,7 +42,10 @@ export class FakeLotteryApi extends LotteryApi {
     ]);
   }
 
+  generateError: Error | null = null;
+
   override generate(game: Game): Promise<GeneratedPicksDto> {
+    if (this.generateError) return Promise.reject(this.generateError);
     return Promise.resolve({ game, whiteBalls: [7, 19, 33, 51, 64], special: 18 });
   }
 

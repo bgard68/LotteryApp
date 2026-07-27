@@ -1,6 +1,6 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+﻿import { Injectable, computed, inject, signal } from '@angular/core';
 import { Game } from '../domain/game';
-import { CheckResultDto, LotteryApi, RuleEraDto } from '../ports/lottery-api';
+import { ApiUnreachableError, CheckResultDto, LotteryApi, RuleEraDto } from '../ports/lottery-api';
 
 /** Ticket-checker state: current picks, era-driven validation, results. */
 @Injectable({ providedIn: 'root' })
@@ -90,8 +90,12 @@ export class CheckerStore {
     this.error.set(null);
     try {
       await work();
-    } catch {
-      this.error.set('Something went wrong - try again.');
+    } catch (e) {
+      // Unreachable backend gets an actionable message - locally it means
+      // the API process isn't running, not that anything is broken here.
+      this.error.set(e instanceof ApiUnreachableError
+        ? "Can't reach the lottery API. If you're running locally, start the backend first."
+        : 'Something went wrong - try again.');
     } finally {
       this.busy.set(false);
     }

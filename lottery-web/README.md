@@ -48,17 +48,44 @@ dotnet run --project ../src/Lottery.Api --urls http://localhost:5090
 npm start
 ```
 
+**Both processes must run.** The frontend has no data of its own - every card
+and button goes through the dev proxy to the API on :5090.
+
+## Troubleshooting
+
+### "Can't reach the lottery API. If you're running locally, start the backend first."
+
+Exactly what it says: the Angular dev server is up but the .NET API is not
+(or is on a different port than `proxy.conf.json` targets). Start the API
+(terminal 1 above) and retry - no restart of the frontend needed.
+
+History of this message: it used to be a generic "Something went wrong - try
+again", which hid the real cause when clicking **Generate picks** with the
+backend down. Root cause found while debugging: when the proxied backend is
+unreachable, Vite's dev proxy responds **500 with an empty body** (not the
+502/504 a classic gateway returns), so naive status checks miss it. The fix:
+the HTTP adapter classifies unreachable-backend responses (status 0, 502,
+503, 504, or 500-with-empty-body - a real API 500 always carries a problem
+body) into a typed `ApiUnreachableError`, and the stores map that to the
+actionable message. Spec-covered in `checker-store.spec.ts`.
+
+### Dashboard cards show the same message
+
+Same cause, same fix - the cards load `/next-draw` and `/latest` through the
+same adapter.
+
 ## Tests
 
 ```bash
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-15 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+17 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 out-of-era/duplicate rejection, incomplete-ticket quiescence, check/generate
-through the port), and an App shell render smoke test. No HTTP mocking
-anywhere - the port abstraction makes fakes trivial.
+through the port, unreachable-vs-generic error messaging), and an App shell
+render smoke test. No HTTP mocking anywhere - the port abstraction makes
+fakes trivial.
 
 ## Generated API types
 
