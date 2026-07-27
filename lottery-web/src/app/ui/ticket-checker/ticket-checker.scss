@@ -24,6 +24,36 @@ select, input, button {
   padding: 0.45rem 0.6rem;
 }
 
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+
+  input { width: 3.4rem; text-align: center; }
+}
+
+.tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ticket-label {
+  min-width: 1.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .inputs {
   display: flex;
   gap: 0.4rem;
@@ -47,6 +77,7 @@ button {
 }
 
 .muted { color: var(--muted); font-size: 0.85rem; margin: 0.2rem 0; }
+.muted.small { font-size: 0.78rem; }
 .hint { color: var(--muted); font-size: 0.75rem; margin: 0.5rem 0 0; }
 .error { color: #b3261e; font-size: 0.85rem; margin: 0.5rem 0 0; }
 
@@ -56,9 +87,15 @@ button {
   padding-top: 0.7rem;
 }
 
+.ticket-results {
+  margin-bottom: 0.6rem;
+}
+
 .match {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 0.8rem;
   background: var(--inset-bg);
   border-radius: 8px;
@@ -66,5 +103,6 @@ button {
   margin: 0.35rem 0;
   font-size: 0.85rem;
 
+  .when { min-width: 9.5rem; }
   .tier { font-weight: 600; }
 }

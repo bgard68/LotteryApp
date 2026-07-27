@@ -1,41 +1,58 @@
-﻿import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { Game } from '../domain/game';
 import { ApiUnreachableError, CheckResultDto, LotteryApi, RuleEraDto } from '../ports/lottery-api';
 
-/** Ticket-checker state: current picks, era-driven validation, results. */
+/** One editable ticket row; null slots are simply not filled in yet. */
+export interface TicketDraft {
+  whites: (number | null)[];
+  special: number | null;
+}
+
+export const MIN_TICKETS = 1;
+export const MAX_TICKETS = 10;
+
+function emptyTicket(): TicketDraft {
+  return { whites: [null, null, null, null, null], special: null };
+}
+
+/** Ticket-checker state: 1-10 ticket drafts, era-driven validation, per-ticket results. */
 @Injectable({ providedIn: 'root' })
 export class CheckerStore {
   private readonly api = inject(LotteryApi);
 
   readonly game = signal<Game>('powerball');
-  readonly whites = signal<(number | null)[]>([null, null, null, null, null]);
-  readonly special = signal<number | null>(null);
+  readonly tickets = signal<TicketDraft[]>([emptyTicket()]);
   readonly era = signal<RuleEraDto | null>(null);
-  readonly result = signal<CheckResultDto | null>(null);
+  /** Parallel to tickets; null until a check has run. */
+  readonly results = signal<CheckResultDto[] | null>(null);
   readonly busy = signal(false);
   readonly error = signal<string | null>(null);
+
+  readonly count = computed(() => this.tickets().length);
 
   /** Client-side validation mirrors the server's (which stays authoritative). */
   readonly validationError = computed<string | null>(() => {
     const era = this.era();
-    const whites = this.whites();
-    const special = this.special();
     if (!era) return null;
-    const filled = whites.filter((w): w is number => w != null);
-    if (filled.length < 5 || special == null) return null; // incomplete, not invalid
-    if (new Set(filled).size !== 5) return 'White balls must be distinct.';
-    if (filled.some((w) => w < 1 || w > era.whiteBallMax))
-      return `White balls must be between 1 and ${era.whiteBallMax}.`;
-    if (special < 1 || special > era.specialBallMax)
-      return `The special ball must be between 1 and ${era.specialBallMax}.`;
+
+    for (const [index, ticket] of this.tickets().entries()) {
+      const filled = ticket.whites.filter((w): w is number => w != null);
+      if (filled.length < 5 || ticket.special == null) continue; // incomplete, not invalid
+      const label = this.tickets().length > 1 ? `Ticket ${index + 1}: ` : '';
+      if (new Set(filled).size !== 5) return `${label}white balls must be distinct.`;
+      if (filled.some((w) => w < 1 || w > era.whiteBallMax))
+        return `${label}white balls must be between 1 and ${era.whiteBallMax}.`;
+      if (ticket.special < 1 || ticket.special > era.specialBallMax)
+        return `${label}the special ball must be between 1 and ${era.specialBallMax}.`;
+    }
     return null;
   });
 
+  readonly allComplete = computed(() =>
+    this.tickets().every((t) => t.special != null && t.whites.every((w) => w != null)));
+
   readonly canCheck = computed(() =>
-    !this.busy()
-    && this.validationError() === null
-    && this.whites().every((w) => w != null)
-    && this.special() != null);
+    !this.busy() && this.allComplete() && this.validationError() === null);
 
   constructor() {
     void this.loadEra();
@@ -43,36 +60,49 @@ export class CheckerStore {
 
   async setGame(game: Game): Promise<void> {
     this.game.set(game);
-    this.result.set(null);
+    this.results.set(null);
     this.error.set(null);
     await this.loadEra();
   }
 
-  setWhite(index: number, value: number | null): void {
-    this.whites.update((w) => w.map((v, i) => (i === index ? value : v)));
-    this.result.set(null);
+  setCount(raw: number): void {
+    const count = Math.min(MAX_TICKETS, Math.max(MIN_TICKETS, Math.floor(raw) || MIN_TICKETS));
+    this.tickets.update((tickets) => {
+      const next = tickets.slice(0, count);
+      while (next.length < count) next.push(emptyTicket());
+      return next;
+    });
+    this.results.set(null);
   }
 
-  setSpecial(value: number | null): void {
-    this.special.set(value);
-    this.result.set(null);
+  setWhite(ticket: number, index: number, value: number | null): void {
+    this.tickets.update((tickets) => tickets.map((t, ti) =>
+      ti === ticket ? { ...t, whites: t.whites.map((v, i) => (i === index ? value : v)) } : t));
+    this.results.set(null);
+  }
+
+  setSpecial(ticket: number, value: number | null): void {
+    this.tickets.update((tickets) => tickets.map((t, ti) =>
+      ti === ticket ? { ...t, special: value } : t));
+    this.results.set(null);
   }
 
   async generate(): Promise<void> {
     await this.run(async () => {
-      const picks = await this.api.generate(this.game());
-      this.whites.set(picks.whiteBalls);
-      this.special.set(picks.special);
-      this.result.set(null);
+      const picks = await this.api.generate(this.game(), this.count());
+      this.tickets.set(picks.tickets.map((t) => ({ whites: [...t.whiteBalls], special: t.special })));
+      this.results.set(null);
     });
   }
 
   async check(): Promise<void> {
-    const whites = this.whites();
-    const special = this.special();
-    if (!this.canCheck() || special == null) return;
+    if (!this.canCheck()) return;
+    const game = this.game();
+    const tickets = this.tickets();
     await this.run(async () => {
-      this.result.set(await this.api.check(this.game(), whites as number[], special));
+      const results = await Promise.all(tickets.map((t) =>
+        this.api.check(game, t.whites as number[], t.special as number)));
+      this.results.set(results);
     });
   }
 

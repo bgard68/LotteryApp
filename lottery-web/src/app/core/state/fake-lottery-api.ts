@@ -43,10 +43,16 @@ export class FakeLotteryApi extends LotteryApi {
   }
 
   generateError: Error | null = null;
+  generateCalls: { game: Game; count: number }[] = [];
 
-  override generate(game: Game): Promise<GeneratedPicksDto> {
+  override generate(game: Game, count: number): Promise<GeneratedPicksDto> {
     if (this.generateError) return Promise.reject(this.generateError);
-    return Promise.resolve({ game, whiteBalls: [7, 19, 33, 51, 64], special: 18 });
+    this.generateCalls.push({ game, count });
+    const tickets = Array.from({ length: count }, (_, i) => ({
+      whiteBalls: [7 + i, 19, 33, 51, 64],
+      special: 18,
+    }));
+    return Promise.resolve({ game, tickets });
   }
 
   override check(game: Game, whites: number[], special: number): Promise<CheckResultDto> {

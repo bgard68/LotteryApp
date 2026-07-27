@@ -29,8 +29,8 @@ export class HttpLotteryApi extends LotteryApi {
     return this.get<RuleEraDto[]>(`/api/${game}/rule-eras`);
   }
 
-  override generate(game: Game): Promise<GeneratedPicksDto> {
-    return this.get<GeneratedPicksDto>(`/api/${game}/generate`);
+  override generate(game: Game, count: number): Promise<GeneratedPicksDto> {
+    return this.get<GeneratedPicksDto>(`/api/${game}/generate?count=${count}`);
   }
 
   override check(game: Game, whites: number[], special: number): Promise<CheckResultDto> {

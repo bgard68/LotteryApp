@@ -45,16 +45,22 @@ export interface RuleEraDto {
   isCurrent: boolean;
 }
 
-export interface GeneratedPicksDto {
-  game: string;
+export interface GeneratedTicketDto {
   whiteBalls: number[];
   special: number;
+}
+
+export interface GeneratedPicksDto {
+  game: string;
+  tickets: GeneratedTicketDto[];
 }
 
 export interface TicketMatchDto {
   drawDate: string;
   whiteMatches: number;
   specialMatched: boolean;
+  drawnWhiteBalls: number[];
+  drawnSpecial: number;
   tier: string;
   approximateAmount: number | null;
   isJackpot: boolean;
@@ -75,6 +81,6 @@ export abstract class LotteryApi {
   abstract nextDraw(game: Game): Promise<NextDrawDto>;
   abstract latest(game: Game): Promise<LatestDrawDto>;
   abstract ruleEras(game: Game): Promise<RuleEraDto[]>;
-  abstract generate(game: Game): Promise<GeneratedPicksDto>;
+  abstract generate(game: Game, count: number): Promise<GeneratedPicksDto>;
   abstract check(game: Game, whites: number[], special: number): Promise<CheckResultDto>;
 }

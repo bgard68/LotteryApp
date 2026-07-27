@@ -20,44 +20,73 @@ describe('CheckerStore', () => {
     await Promise.resolve(); // let the constructor's era load settle
   });
 
+  function fillTicket(t: number, whites: number[], special: number): void {
+    whites.forEach((v, i) => store.setWhite(t, i, v));
+    store.setSpecial(t, special);
+  }
+
   it('loads the current era on creation', () => {
     expect(store.era()?.whiteBallMax).toBe(69);
   });
 
-  it('rejects out-of-era whites with a reason', () => {
-    [1, 2, 3, 4, 70].forEach((v, i) => store.setWhite(i, v));
-    store.setSpecial(5);
+  it('starts with a single empty ticket', () => {
+    expect(store.count()).toBe(1);
+    expect(store.canCheck()).toBeFalse();
+  });
+
+  it('setCount clamps to 1-10 and preserves existing tickets', () => {
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    store.setCount(3);
+    expect(store.count()).toBe(3);
+    expect(store.tickets()[0].whites).toEqual([7, 19, 33, 51, 64]);
+
+    store.setCount(99);
+    expect(store.count()).toBe(10);
+    store.setCount(0);
+    expect(store.count()).toBe(1);
+  });
+
+  it('rejects out-of-era whites naming the ticket', () => {
+    store.setCount(2);
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    fillTicket(1, [1, 2, 3, 4, 70], 5);
+    expect(store.validationError()).toContain('Ticket 2');
     expect(store.validationError()).toContain('between 1 and 69');
     expect(store.canCheck()).toBeFalse();
   });
 
   it('rejects duplicate whites', () => {
-    [1, 1, 2, 3, 4].forEach((v, i) => store.setWhite(i, v));
-    store.setSpecial(5);
+    fillTicket(0, [1, 1, 2, 3, 4], 5);
     expect(store.validationError()).toContain('distinct');
   });
 
-  it('stays quiet while the ticket is incomplete', () => {
-    store.setWhite(0, 7);
+  it('stays quiet while tickets are incomplete', () => {
+    store.setWhite(0, 0, 7);
     expect(store.validationError()).toBeNull();
     expect(store.canCheck()).toBeFalse();
   });
 
-  it('checks a valid ticket through the port', async () => {
-    [7, 19, 33, 51, 64].forEach((v, i) => store.setWhite(i, v));
-    store.setSpecial(18);
+  it('generate fills as many tickets as the count', async () => {
+    store.setCount(3);
+    await store.generate();
+    expect(api.generateCalls).toEqual([{ game: 'powerball', count: 3 }]);
+    expect(store.tickets().length).toBe(3);
+    expect(store.tickets()[1].whites).toEqual([8, 19, 33, 51, 64]);
     expect(store.canCheck()).toBeTrue();
+  });
+
+  it('check runs every ticket through the port and keeps results parallel', async () => {
+    store.setCount(2);
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    fillTicket(1, [1, 2, 3, 4, 5], 6);
 
     await store.check();
 
-    expect(api.checkCalls).toEqual([{ game: 'powerball', whites: [7, 19, 33, 51, 64], special: 18 }]);
-    expect(store.result()?.drawsChecked).toBe(1971);
-  });
-
-  it('generate fills picks from the port', async () => {
-    await store.generate();
-    expect(store.whites()).toEqual([7, 19, 33, 51, 64]);
-    expect(store.special()).toBe(18);
+    expect(api.checkCalls).toEqual([
+      { game: 'powerball', whites: [7, 19, 33, 51, 64], special: 18 },
+      { game: 'powerball', whites: [1, 2, 3, 4, 5], special: 6 },
+    ]);
+    expect(store.results()?.length).toBe(2);
   });
 
   it('an unreachable backend produces an actionable message', async () => {

@@ -1,4 +1,4 @@
-# lottery-web (frontend - lives on the `frontend` branch only)
+﻿# lottery-web (frontend - lives on the `frontend` branch only)
 
 Angular 20 dashboard: game cards with jackpots and live countdowns, last
 winning numbers, and the ticket checker. **This app is developed on the
@@ -13,18 +13,18 @@ Same dependency rule as the backend, enforced by folder discipline:
 
 ```
 src/app/
-├── core/
-│   ├── domain/     # pure TS, framework-free: game metadata, countdown math,
-│   │               #   jackpot formatting (all unit-tested without Angular)
-│   ├── ports/      # abstractions the UI depends on (DIP):
-│   │               #   LotteryApi (abstract class) + CLOCK (injectable "now")
-│   ├── data/       # HttpLotteryApi - the HTTP adapter, bound in app.config.ts
-│   ├── api/        # schema.d.ts - types GENERATED from the backend's OpenAPI
-│   └── state/      # signal stores: DashboardStore (cards + ticking countdown),
-│                   #   CheckerStore (picks, era validation, results)
-├── ui/             # dumb presentational components - no store/HTTP access:
-│                   #   game-card, number-balls; ticket-checker is the feature edge
-└── app.ts          # the only smart shell; app.config.ts = composition root
+â”œâ”€â”€ core/
+â”‚   â”œâ”€â”€ domain/     # pure TS, framework-free: game metadata, countdown math,
+â”‚   â”‚               #   jackpot formatting (all unit-tested without Angular)
+â”‚   â”œâ”€â”€ ports/      # abstractions the UI depends on (DIP):
+â”‚   â”‚               #   LotteryApi (abstract class) + CLOCK (injectable "now")
+â”‚   â”œâ”€â”€ data/       # HttpLotteryApi - the HTTP adapter, bound in app.config.ts
+â”‚   â”œâ”€â”€ api/        # schema.d.ts - types GENERATED from the backend's OpenAPI
+â”‚   â””â”€â”€ state/      # signal stores: DashboardStore (cards + ticking countdown),
+â”‚                   #   CheckerStore (picks, era validation, results)
+â”œâ”€â”€ ui/             # dumb presentational components - no store/HTTP access:
+â”‚                   #   game-card, number-balls; ticket-checker is the feature edge
+â””â”€â”€ app.ts          # the only smart shell; app.config.ts = composition root
 ```
 
 - **Zoneless + signals + OnPush** throughout; no RxJS state (the only
@@ -80,7 +80,7 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-17 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+19 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 out-of-era/duplicate rejection, incomplete-ticket quiescence, check/generate
 through the port, unreachable-vs-generic error messaging), and an App shell

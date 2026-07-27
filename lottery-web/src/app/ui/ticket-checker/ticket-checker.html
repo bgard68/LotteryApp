@@ -1,6 +1,6 @@
 <section class="card">
   <h2>Check your numbers</h2>
-  <p class="muted">See if your picks ever matched a past drawing.</p>
+  <p class="muted">Generate up to {{ maxTickets }} tickets, or enter your own, then check them against every past drawing.</p>
 
   <div class="controls">
     <select [value]="store.game()" (change)="store.setGame($any($event.target).value)" aria-label="Game">
@@ -9,39 +9,59 @@
       }
     </select>
 
-    <div class="inputs">
-      @for (w of store.whites(); track $index) {
-        <input
-          type="number"
-          inputmode="numeric"
-          [value]="w ?? ''"
-          (input)="onNumber($index, $any($event.target).value)"
-          [attr.aria-label]="'White ball ' + ($index + 1)"
-          min="1"
-          [max]="store.era()?.whiteBallMax ?? 99" />
-      }
+    <label class="count">
+      Tickets
       <input
-        class="special"
-        [class.pb]="store.game() === 'powerball'"
-        [class.mm]="store.game() === 'megamillions'"
         type="number"
-        inputmode="numeric"
-        [value]="store.special() ?? ''"
-        (input)="onNumber('special', $any($event.target).value)"
-        aria-label="Special ball"
-        min="1"
-        [max]="store.era()?.specialBallMax ?? 99" />
-    </div>
+        [min]="minTickets"
+        [max]="maxTickets"
+        [value]="store.count()"
+        (change)="onCount($any($event.target).value)"
+        aria-label="Number of tickets" />
+    </label>
 
+    <button (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
     <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
-    <button class="secondary" (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
   </div>
 
   @if (store.era(); as era) {
     <p class="hint">
-      Pick 5 numbers from 1–{{ era.whiteBallMax }} and one special from 1–{{ era.specialBallMax }}.
+      Each ticket: 5 numbers from 1–{{ era.whiteBallMax }} and one special from 1–{{ era.specialBallMax }}.
     </p>
   }
+
+  <div class="tickets">
+    @for (ticket of store.tickets(); track $index; let t = $index) {
+      <div class="ticket-row">
+        @if (store.count() > 1) {
+          <span class="ticket-label">#{{ t + 1 }}</span>
+        }
+        <div class="inputs">
+          @for (w of ticket.whites; track $index) {
+            <input
+              type="number"
+              inputmode="numeric"
+              [value]="w ?? ''"
+              (input)="onNumber(t, $index, $any($event.target).value)"
+              [attr.aria-label]="'Ticket ' + (t + 1) + ' white ball ' + ($index + 1)"
+              min="1"
+              [max]="store.era()?.whiteBallMax ?? 99" />
+          }
+          <input
+            class="special"
+            [class.pb]="store.game() === 'powerball'"
+            [class.mm]="store.game() === 'megamillions'"
+            type="number"
+            inputmode="numeric"
+            [value]="ticket.special ?? ''"
+            (input)="onNumber(t, 'special', $any($event.target).value)"
+            [attr.aria-label]="'Ticket ' + (t + 1) + ' special ball'"
+            min="1"
+            [max]="store.era()?.specialBallMax ?? 99" />
+        </div>
+      </div>
+    }
+  </div>
 
   @if (store.validationError(); as validation) {
     <p class="error">{{ validation }}</p>
@@ -50,33 +70,39 @@
     <p class="error">{{ error }}</p>
   }
 
-  @if (store.result(); as result) {
+  @if (store.results(); as results) {
     <div class="results">
-      <p class="muted">
-        {{ result.matches.length }} winning match(es) across
-        {{ result.drawsChecked.toLocaleString() }} drawings
-        @if (result.historySince) { since {{ result.historySince + 'T12:00:00' | date: 'yyyy' }} }
-      </p>
-      @for (m of result.matches; track m.drawDate) {
-        <div class="match">
-          <span>{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
-          <span class="muted">
-            {{ m.whiteMatches }} white
-            @if (m.specialMatched) { + special }
-          </span>
-          <span class="tier">
-            {{ m.tier }} ·
-            @if (m.isJackpot) { Jackpot } @else { {{ formatJackpot(m.approximateAmount) }} }
-          </span>
+      @for (ticket of store.tickets(); track $index; let t = $index) {
+        <div class="ticket-results">
+          <p class="muted">
+            @if (store.count() > 1) { Ticket {{ t + 1 }} · }
+            {{ winningMatches(t).length }} winning match(es) across
+            {{ (results[t].drawsChecked).toLocaleString() }} drawings
+            @if (results[t].historySince) { since {{ results[t].historySince + 'T12:00:00' | date: 'yyyy' }} }
+          </p>
+          @for (m of winningMatches(t); track m.drawDate) {
+            <div class="match">
+              <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
+              <app-number-balls
+                [whites]="$any(ticket.whites)"
+                [special]="ticket.special ?? 0"
+                [accent]="accent()"
+                [matchedWhites]="matchedWhites(ticket, m)"
+                [specialMatched]="m.specialMatched" />
+              <span class="tier">
+                {{ m.tier }} ·
+                @if (m.isJackpot) { Jackpot } @else { {{ formatJackpot(m.approximateAmount) }} }
+              </span>
+            </div>
+          } @empty {
+            <p class="muted small">No winning matches - in good company: most tickets never win.</p>
+          }
         </div>
-      } @empty {
-        <p class="muted">No winning matches - in good company: most tickets never win.</p>
       }
-      @if (result.matches.length > 0) {
-        <p class="hint">
-          Prize amounts are today's approximate tier values - historical winnings expire and cannot be claimed.
-        </p>
-      }
+      <p class="hint">
+        Flashing numbers are the ones that matched that drawing. Prize amounts are today's
+        approximate tier values - historical winnings expire and cannot be claimed.
+      </p>
     </div>
   }
 </section>
