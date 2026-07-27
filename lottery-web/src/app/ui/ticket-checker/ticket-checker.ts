@@ -78,7 +78,10 @@ export class TicketChecker {
     return this.store.game() === 'powerball' ? 'Powerball' : 'Mega Ball';
   }
 
-  /** Matches worth shouting about: 3+ whites AND the special ball. Hidden when none. */
+  /**
+   * Matches worth shouting about: 3+ matched numbers COUNTING the special
+   * ball (so 2 whites + special qualifies). Hidden when none.
+   */
   protected bigWins(): { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] {
     const results = this.store.results();
     if (!results) return [];
@@ -86,7 +89,7 @@ export class TicketChecker {
     const wins: { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] = [];
     results.forEach((result, ticket) => {
       result?.matches.forEach((match) => {
-        if (match.whiteMatches >= 3 && match.specialMatched)
+        if (match.specialMatched && match.whiteMatches >= 2)
           wins.push({ ticket, draft: tickets[ticket], match });
       });
     });
