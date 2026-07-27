@@ -97,7 +97,7 @@
       @if (bigWins().length > 0) {
         <div class="big-wins" role="status">
           <p class="big-title">
-            Big win{{ bigWins().length > 1 ? 's' : '' }} - 3 or more matched numbers including the {{ specialName() }}
+            Big win{{ bigWins().length > 1 ? 's' : '' }} - 3 or more matching numbers plus the {{ specialName() }}
           </p>
           @for (w of bigWins(); track $index) {
             <div class="big-row">

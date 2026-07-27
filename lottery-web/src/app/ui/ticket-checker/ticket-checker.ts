@@ -79,8 +79,8 @@ export class TicketChecker {
   }
 
   /**
-   * Matches worth shouting about: 3+ matched numbers COUNTING the special
-   * ball (so 2 whites + special qualifies). Hidden when none.
+   * Matches worth shouting about: 3 or more matching WHITE balls plus the
+   * special ball (Match 3 + PB, $100 tier, and up). Hidden when none.
    */
   protected bigWins(): { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] {
     const results = this.store.results();
@@ -89,7 +89,7 @@ export class TicketChecker {
     const wins: { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] = [];
     results.forEach((result, ticket) => {
       result?.matches.forEach((match) => {
-        if (match.specialMatched && match.whiteMatches >= 2)
+        if (match.whiteMatches >= 3 && match.specialMatched)
           wins.push({ ticket, draft: tickets[ticket], match });
       });
     });
