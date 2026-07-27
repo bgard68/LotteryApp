@@ -228,10 +228,19 @@ dotnet test
 historical draws against the rule-era table. Details in
 [tests/README.md](tests/README.md).
 
+## Requirements and design decisions
+
+The full requirements list, the decision log (with rejected alternatives), and
+the approved design: [docs/REQUIREMENTS-AND-DECISIONS.md](docs/REQUIREMENTS-AND-DECISIONS.md).
+
 ## Lessons learned
 
 Real bugs and problems hit while building, and their fixes:
 [docs/LESSONS-LEARNED.md](docs/LESSONS-LEARNED.md).
+
+## Security
+
+Vulnerability reporting: [SECURITY.md](SECURITY.md).
 
 ## License
 
