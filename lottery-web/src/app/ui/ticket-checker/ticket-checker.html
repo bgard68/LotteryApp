@@ -101,13 +101,21 @@
           </p>
           @for (w of bigWins(); track $index) {
             <div class="big-row">
-              <span>
+              <span class="big-when">
                 @if (store.count() > 1) { Ticket {{ w.ticket + 1 }} · }
                 {{ w.match.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}
               </span>
+              <app-number-balls
+                [whites]="$any(w.draft.whites)"
+                [special]="w.draft.special ?? 0"
+                [accent]="accent()"
+                [matchedWhites]="matchedWhites(w.draft, w.match)"
+                [specialMatched]="w.match.specialMatched" />
               <span class="big-tier">
-                {{ w.match.tier }} ·
-                @if (w.match.isJackpot) { JACKPOT } @else { {{ formatJackpot(w.match.approximateAmount) }} }
+                {{ w.match.tier }}
+                <span class="big-payout">
+                  @if (w.match.isJackpot) { JACKPOT } @else { {{ formatJackpot(w.match.approximateAmount) }} }
+                </span>
               </span>
             </div>
           }

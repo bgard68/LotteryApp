@@ -68,13 +68,15 @@ export class TicketChecker {
   }
 
   /** Matches worth shouting about: 3+ whites AND the special ball. Hidden when none. */
-  protected bigWins(): { ticket: number; match: TicketMatchDto }[] {
+  protected bigWins(): { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] {
     const results = this.store.results();
     if (!results) return [];
-    const wins: { ticket: number; match: TicketMatchDto }[] = [];
+    const tickets = this.store.tickets();
+    const wins: { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] = [];
     results.forEach((result, ticket) => {
       result?.matches.forEach((match) => {
-        if (match.whiteMatches >= 3 && match.specialMatched) wins.push({ ticket, match });
+        if (match.whiteMatches >= 3 && match.specialMatched)
+          wins.push({ ticket, draft: tickets[ticket], match });
       });
     });
     return wins;

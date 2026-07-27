@@ -130,12 +130,16 @@ button {
 
   .big-row {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 0.8rem;
     font-size: 0.85rem;
-    padding: 0.15rem 0;
+    padding: 0.3rem 0;
 
-    .big-tier { font-weight: 700; }
+    .big-when { min-width: 9.5rem; }
+    .big-tier { font-weight: 700; text-align: right; }
+    .big-payout { display: block; color: var(--hit-color); font-size: 0.95rem; }
   }
 }
 
