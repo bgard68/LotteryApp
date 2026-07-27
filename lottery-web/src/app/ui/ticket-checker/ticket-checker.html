@@ -54,7 +54,7 @@
 
   <div class="tickets">
     @for (ticket of store.tickets(); track $index; let t = $index) {
-      <div class="ticket-row">
+      <div class="ticket-row" [class.big-win]="isBigWinTicket(t)">
         @if (store.count() > 1) {
           <span class="ticket-label">#{{ t + 1 }}</span>
         }
@@ -133,7 +133,7 @@
         matches per ticket
       </label>
       @for (ticket of store.tickets(); track $index; let t = $index) {
-        @if (results[t]; as result) {
+        @if (displayedResult(t); as result) {
           <div class="ticket-results">
             <p class="muted">
               @if (store.count() > 1) { Ticket {{ t + 1 }} · }

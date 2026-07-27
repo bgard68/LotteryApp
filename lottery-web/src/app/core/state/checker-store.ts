@@ -15,6 +15,15 @@ function emptyTicket(): TicketDraft {
   return { whites: [null, null, null, null, null], special: null };
 }
 
+function isCheckable(ticket: TicketDraft, era: RuleEraDto | null): boolean {
+  if (ticket.special == null || ticket.whites.some((w) => w == null)) return false;
+  const whites = ticket.whites as number[];
+  if (new Set(whites).size !== 5) return false;
+  if (!era) return true; // the server validates authoritatively anyway
+  return whites.every((w) => w >= 1 && w <= era.whiteBallMax)
+    && ticket.special >= 1 && ticket.special <= era.specialBallMax;
+}
+
 /** Ticket-checker state: 1-10 ticket drafts, era-driven validation, per-ticket results. */
 @Injectable({ providedIn: 'root' })
 export class CheckerStore {
@@ -90,9 +99,11 @@ export class CheckerStore {
     this.results.set(null);
   }
 
+  // Selection is a VIEW filter: every complete ticket is checked regardless
+  // (so big wins can surface on unselected tickets), so switching the
+  // selection never discards results.
   setSelectedTicket(value: number | 'all'): void {
     this.selectedTicket.set(value);
-    this.results.set(null);
   }
 
   setWhite(ticket: number, index: number, value: number | null): void {
@@ -122,10 +133,14 @@ export class CheckerStore {
   async check(): Promise<void> {
     if (!this.canCheck()) return;
     const game = this.game();
+    const era = this.era();
     const tickets = this.tickets();
     await this.run(async () => {
-      const results = await Promise.all(tickets.map((t, i) =>
-        this.isSelected(i)
+      // Every complete, valid ticket is checked - not just the selected one -
+      // so the big-wins panel always covers the whole set. Incomplete or
+      // invalid unselected tickets are simply skipped.
+      const results = await Promise.all(tickets.map((t) =>
+        isCheckable(t, era)
           ? this.api.check(game, t.whites as number[], t.special as number)
           : Promise.resolve<CheckResultDto | null>(null)));
       this.results.set(results);

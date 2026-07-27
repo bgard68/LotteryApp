@@ -48,6 +48,17 @@ export class TicketChecker {
     return this.store.results()?.[ticketIndex]?.matches ?? [];
   }
 
+  /** Detailed results respect the selection; big wins deliberately do not. */
+  protected displayedResult(ticketIndex: number) {
+    const results = this.store.results();
+    return results && this.store.isSelected(ticketIndex) ? results[ticketIndex] : null;
+  }
+
+  /** Tickets that appear in the big-wins panel - highlighted in the ticket rows. */
+  protected isBigWinTicket(ticketIndex: number): boolean {
+    return this.bigWins().some((w) => w.ticket === ticketIndex);
+  }
+
   /** Slice per the "show per ticket" selector; results stay fully loaded. */
   protected visibleMatches(ticketIndex: number): TicketMatchDto[] {
     const matches = this.winningMatches(ticketIndex);
