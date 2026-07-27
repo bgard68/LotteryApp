@@ -1,4 +1,4 @@
-# LotteryApp
+﻿# LotteryApp
 
 Powerball and Mega Millions results, next-draw countdowns, number generation, and
 ticket checking against 24 years of real drawing history.
@@ -67,7 +67,7 @@ dotnet run --project src/Lottery.Api
 | `GET /api/{game}/draws?from=&to=&limit=` | History |
 | `GET /api/{game}/check?whites=1,2,3,4,5&special=6` | Check a ticket against all history |
 | `GET /api/{game}/rule-eras` | Number-matrix eras over time |
-| `GET /api/{game}/generate` | Random era-valid picks |
+| `GET /api/{game}/generate?count=N` | 1-10 random era-valid tickets (default 1) |
 | `GET /healthz` | Health (used by keep-alive + smoke test) |
 | `POST /internal/refresh` | Trigger a refresh cycle (optional `X-Refresh-Key` guard via env config) |
 
@@ -222,7 +222,7 @@ reseeds on next start).
 ## Smoke test (PowerShell)
 
 [`scripts/smoke-test.ps1`](scripts/README.md) exercises **every endpoint,
-including error conditions** - 23 checks: happy paths for both games plus
+including error conditions** - 27 checks: happy paths for both games plus
 404 for unknown games and 400s for malformed tickets (too few numbers,
 duplicates, out-of-era values, non-numeric input). It runs three ways: locally
 against a dev server, in CI, and as the **post-deploy gate** - a failed smoke
@@ -238,7 +238,7 @@ pwsh scripts/smoke-test.ps1 -BaseUrl http://localhost:5000
 dotnet test
 ```
 
-66 tests, all layers - including DST-boundary schedule tests driven by
+68 tests, all layers - including DST-boundary schedule tests driven by
 `FakeTimeProvider`, an **era-coverage test** that validates all 4,493
 historical draws against the rule-era table, and feed contract tests against
 recorded real payloads. Details in [tests/README.md](tests/README.md).
