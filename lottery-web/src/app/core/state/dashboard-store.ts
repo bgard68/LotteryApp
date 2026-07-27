@@ -1,7 +1,7 @@
 ﻿import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { Countdown, countdownTo } from '../domain/countdown';
 import { GAMES, Game, GameMeta } from '../domain/game';
-import { ApiUnreachableError, LatestDrawDto, LotteryApi, NextDrawDto } from '../ports/lottery-api';
+import { ApiUnreachableError, LatestDrawDto, LotteryApi, NextDrawDto, RateLimitedError } from '../ports/lottery-api';
 import { CLOCK } from '../ports/clock';
 
 export interface GameCardView {
@@ -58,9 +58,11 @@ export class DashboardStore {
       const msToDraw = Date.parse(next.drawTimeUtc) - this.clock();
       if (msToDraw > 0) setTimeout(() => void this.load(game), msToDraw + 30_000);
     } catch (e) {
-      const message = e instanceof ApiUnreachableError
-        ? "Can't reach the lottery API. If you're running locally, start the backend first."
-        : 'Could not load drawing data.';
+      const message = e instanceof RateLimitedError
+        ? 'Loading a little too fast - refresh again in a few seconds.'
+        : e instanceof ApiUnreachableError
+          ? "Can't reach the lottery API. If you're running locally, start the backend first."
+          : 'Could not load drawing data.';
       this.errors.update((m) => ({ ...m, [game]: message }));
     } finally {
       this.loadedGames.update((s) => new Set(s).add(game));

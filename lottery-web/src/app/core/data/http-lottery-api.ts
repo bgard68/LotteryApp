@@ -4,6 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import type { Game } from '../domain/game';
 import {
   ApiUnreachableError,
+  RateLimitedError,
   CheckResultDto,
   GeneratedPicksDto,
   LatestDrawDto,
@@ -41,6 +42,8 @@ export class HttpLotteryApi extends LotteryApi {
     try {
       return await firstValueFrom(this.http.get<T>(url));
     } catch (e) {
+      if (e instanceof HttpErrorResponse && e.status === 429)
+        throw new RateLimitedError();
       if (e instanceof HttpErrorResponse && isUnreachable(e))
         throw new ApiUnreachableError();
       throw e;

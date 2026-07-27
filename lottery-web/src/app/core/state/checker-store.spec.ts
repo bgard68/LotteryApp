@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CheckerStore } from './checker-store';
 import { FakeLotteryApi } from './fake-lottery-api';
-import { ApiUnreachableError, LotteryApi } from '../ports/lottery-api';
+import { ApiUnreachableError, LotteryApi, RateLimitedError } from '../ports/lottery-api';
 
 describe('CheckerStore', () => {
   let store: CheckerStore;
@@ -131,6 +131,12 @@ describe('CheckerStore', () => {
     api.generateError = new ApiUnreachableError();
     await store.generate();
     expect(store.error()).toContain('start the backend');
+  });
+
+  it('a rate-limited request gets a wait-and-retry message', async () => {
+    api.generateError = new RateLimitedError();
+    await store.generate();
+    expect(store.error()).toContain('wait a few seconds');
   });
 
   it('other failures keep the generic message', async () => {

@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Game } from '../domain/game';
-import { ApiUnreachableError, CheckResultDto, LotteryApi, RuleEraDto } from '../ports/lottery-api';
+import { ApiUnreachableError, CheckResultDto, LotteryApi, RateLimitedError, RuleEraDto } from '../ports/lottery-api';
 
 /** One editable ticket row; null slots are simply not filled in yet. */
 export interface TicketDraft {
@@ -147,11 +147,14 @@ export class CheckerStore {
     try {
       await work();
     } catch (e) {
-      // Unreachable backend gets an actionable message - locally it means
-      // the API process isn't running, not that anything is broken here.
-      this.error.set(e instanceof ApiUnreachableError
-        ? "Can't reach the lottery API. If you're running locally, start the backend first."
-        : 'Something went wrong - try again.');
+      // Classified transport errors get actionable messages; everything else
+      // stays generic.
+      this.error.set(
+        e instanceof RateLimitedError
+          ? 'Checking a little too fast - wait a few seconds and try again.'
+          : e instanceof ApiUnreachableError
+            ? "Can't reach the lottery API. If you're running locally, start the backend first."
+            : 'Something went wrong - try again.');
     } finally {
       this.busy.set(false);
     }

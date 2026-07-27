@@ -12,6 +12,13 @@ export class ApiUnreachableError extends Error {
   }
 }
 
+/** The API's per-client rate limit (HTTP 429) - transient; retry shortly. */
+export class RateLimitedError extends Error {
+  constructor() {
+    super('Too many requests.');
+  }
+}
+
 /**
  * DTO shapes mirror the backend contract; the generated OpenAPI types in
  * core/api/schema.d.ts are the source-of-truth reference (a CI check keeps
