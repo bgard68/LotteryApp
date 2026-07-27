@@ -1,0 +1,22 @@
+<main>
+  <header class="masthead">
+    <h1>Lucky numbers</h1>
+    <p class="muted">Powerball &amp; Mega Millions results, countdowns, and ticket checking</p>
+  </header>
+
+  <div class="cards">
+    @for (card of dashboard.cards(); track card.meta.game) {
+      <app-game-card [view]="card" />
+    }
+  </div>
+
+  <app-ticket-checker />
+
+  <footer>
+    <p>
+      Random picks are random - past drawings do not predict future ones.
+      This site is not affiliated with MUSL, Powerball, or Mega Millions.
+      If you believe you hold a winning ticket, verify it with the official lottery.
+    </p>
+  </footer>
+</main>

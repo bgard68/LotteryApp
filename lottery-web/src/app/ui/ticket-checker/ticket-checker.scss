@@ -1,0 +1,70 @@
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 1.1rem 1.3rem;
+
+  h2 { margin: 0 0 0.15rem; font-size: 1.05rem; }
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.9rem;
+}
+
+select, input, button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: inherit;
+  padding: 0.45rem 0.6rem;
+}
+
+.inputs {
+  display: flex;
+  gap: 0.4rem;
+
+  input {
+    width: 3.1rem;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+    &::-webkit-outer-spin-button, &::-webkit-inner-spin-button { appearance: none; }
+  }
+
+  .special.pb { border-color: var(--pb-accent); }
+  .special.mm { border-color: var(--mm-accent); }
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.muted { color: var(--muted); font-size: 0.85rem; margin: 0.2rem 0; }
+.hint { color: var(--muted); font-size: 0.75rem; margin: 0.5rem 0 0; }
+.error { color: #b3261e; font-size: 0.85rem; margin: 0.5rem 0 0; }
+
+.results {
+  border-top: 1px solid var(--card-border);
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+}
+
+.match {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.8rem;
+  background: var(--inset-bg);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+
+  .tier { font-weight: 600; }
+}

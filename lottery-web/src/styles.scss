@@ -1,0 +1,44 @@
+/* Theme tokens - light/dark aware. Game accents: Powerball red, Mega Millions amber. */
+:root {
+  --pb-accent: #c8102e;
+  --pb-chip-bg: #fdecee;
+  --mm-accent: #f5b91a;
+  --mm-strong: #8a6200;
+  --mm-chip-bg: #fdf3d7;
+
+  --card-bg: #ffffff;
+  --card-border: #e3e1dc;
+  --inset-bg: #f6f5f2;
+  --chip-bg: #f0efec;
+  --chip-fg: #555;
+  --ball-bg: #ffffff;
+  --ball-border: #c9c7c2;
+  --muted: #6b6a66;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pb-accent: #ff5a6e;
+    --pb-chip-bg: #3a1216;
+    --mm-strong: #f5b91a;
+    --mm-chip-bg: #33270a;
+
+    --card-bg: #1e1e1c;
+    --card-border: #3a3936;
+    --inset-bg: #262523;
+    --chip-bg: #2e2d2a;
+    --chip-fg: #bbb;
+    --ball-bg: #2a2927;
+    --ball-border: #55534e;
+    --muted: #a3a19c;
+  }
+}
+
+html, body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: light-dark(#faf9f7, #141413);
+  color: light-dark(#1c1c1a, #ecebe8);
+}
