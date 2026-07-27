@@ -58,15 +58,4 @@ export class TicketChecker {
   protected onPageSize(raw: string): void {
     this.store.setPageSize(raw === 'all' ? 'all' : Number(raw));
   }
-
-  /** After a check, a ticket input flashes when that number hit in ANY of its winning matches. */
-  protected isWhiteHit(ticketIndex: number, value: number | null): boolean {
-    if (value == null || !this.store.results()) return false;
-    return this.winningMatches(ticketIndex).some((m) => m.drawnWhiteBalls.includes(value));
-  }
-
-  protected isSpecialHit(ticketIndex: number): boolean {
-    if (!this.store.results()) return false;
-    return this.winningMatches(ticketIndex).some((m) => m.specialMatched);
-  }
 }
