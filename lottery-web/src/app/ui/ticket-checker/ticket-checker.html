@@ -106,8 +106,8 @@
                 {{ w.match.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}
               </span>
               <app-number-balls
-                [whites]="$any(w.draft.whites)"
-                [special]="w.draft.special ?? 0"
+                [whites]="w.match.drawnWhiteBalls"
+                [special]="w.match.drawnSpecial"
                 [accent]="accent()"
                 [matchedWhites]="matchedWhites(w.draft, w.match)"
                 [specialMatched]="w.match.specialMatched" />
@@ -145,8 +145,8 @@
               <div class="match">
                 <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
                 <app-number-balls
-                  [whites]="$any(ticket.whites)"
-                  [special]="ticket.special ?? 0"
+                  [whites]="m.drawnWhiteBalls"
+                  [special]="m.drawnSpecial"
                   [accent]="accent()"
                   [matchedWhites]="matchedWhites(ticket, m)"
                   [specialMatched]="m.specialMatched" />
@@ -167,8 +167,9 @@
         }
       }
       <p class="hint">
-        Flashing numbers are the ones that matched that drawing. Prize amounts are today's
-        approximate tier values - historical winnings expire and cannot be claimed.
+        Each row shows that drawing's winning numbers; the flashing ones are on your ticket.
+        Prize amounts are today's approximate tier values - historical winnings expire and
+        cannot be claimed.
       </p>
     </div>
   }
