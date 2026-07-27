@@ -70,10 +70,6 @@ export class TicketChecker {
     this.store.setPageSize(raw === 'all' ? 'all' : Number(raw));
   }
 
-  protected onSelectedTicket(raw: string): void {
-    this.store.setSelectedTicket(raw === 'all' ? 'all' : Number(raw));
-  }
-
   protected specialName(): string {
     return this.store.game() === 'powerball' ? 'Powerball' : 'Mega Ball';
   }

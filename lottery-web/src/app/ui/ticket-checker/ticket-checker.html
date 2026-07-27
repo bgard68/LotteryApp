@@ -28,20 +28,8 @@
     <fieldset class="panel">
       <legend>Check</legend>
       @if (store.count() > 1) {
-        <label class="which">
-          Ticket
-          <select
-            [value]="store.selectedTicket()"
-            (change)="onSelectedTicket($any($event.target).value)"
-            aria-label="Which ticket to check">
-            <option value="all">All tickets</option>
-            @for (ticket of store.tickets(); track $index; let t = $index) {
-              <option [value]="t">Ticket {{ t + 1 }}</option>
-            }
-          </select>
-        </label>
+        <span class="which">Checkmark the tickets to include</span>
       }
-
       <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
     </fieldset>
   </div>
@@ -56,6 +44,12 @@
     @for (ticket of store.tickets(); track $index; let t = $index) {
       <div class="ticket-row" [class.big-win]="isBigWinTicket(t)">
         @if (store.count() > 1) {
+          <input
+            class="pick"
+            type="checkbox"
+            [checked]="ticket.selected"
+            (change)="store.toggleSelected(t)"
+            [attr.aria-label]="'Include ticket ' + (t + 1) + ' in check history'" />
           <span class="ticket-label">#{{ t + 1 }}</span>
         }
         <div class="inputs">

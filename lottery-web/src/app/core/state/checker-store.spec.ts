@@ -89,12 +89,13 @@ describe('CheckerStore', () => {
     expect(store.results()?.length).toBe(2);
   });
 
-  it('checks every complete ticket even when one is selected (big wins cover all)', async () => {
+  it('checks every complete ticket even when some are unchecked (big wins cover all)', async () => {
     store.setCount(3);
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     fillTicket(1, [1, 2, 3, 4, 5], 6);
     fillTicket(2, [10, 20, 30, 40, 50], 7);
-    store.setSelectedTicket(1);
+    store.toggleSelected(0);
+    store.toggleSelected(2); // only ticket 2 remains checkmarked
 
     await store.check();
 
@@ -102,11 +103,11 @@ describe('CheckerStore', () => {
     expect(store.results()!.every((r) => r !== null)).toBeTrue();
   });
 
-  it('a selected ticket only needs ITSELF complete; incomplete tickets are skipped', async () => {
+  it('a checkmarked ticket only needs ITSELF complete; incomplete tickets are skipped', async () => {
     store.setCount(2);
     fillTicket(0, [7, 19, 33, 51, 64], 18);
-    // ticket 2 left empty - selecting ticket 1 must still allow checking
-    store.setSelectedTicket(0);
+    // ticket 2 left empty and unchecked - checking must still be allowed
+    store.toggleSelected(1);
     expect(store.canCheck()).toBeTrue();
 
     await store.check();
@@ -115,24 +116,23 @@ describe('CheckerStore', () => {
     expect(store.results()![1]).toBeNull();
   });
 
-  it('changing the selection keeps existing results (view filter only)', async () => {
+  it('toggling a checkbox keeps existing results (view filter only)', async () => {
     store.setCount(2);
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     fillTicket(1, [1, 2, 3, 4, 5], 6);
     await store.check();
 
-    store.setSelectedTicket(1);
+    store.toggleSelected(0);
 
     expect(store.results()).not.toBeNull();
     expect(store.isSelected(0)).toBeFalse();
     expect(store.isSelected(1)).toBeTrue();
   });
 
-  it('shrinking the count resets an out-of-range selection to all', () => {
-    store.setCount(3);
-    store.setSelectedTicket(2);
-    store.setCount(2);
-    expect(store.selectedTicket()).toBe('all');
+  it('unchecking every ticket disables Check history', () => {
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    store.toggleSelected(0);
+    expect(store.canCheck()).toBeFalse();
   });
 
   it('pageSize defaults to 10 and accepts all', () => {

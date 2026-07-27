@@ -6,13 +6,15 @@ import { ApiUnreachableError, CheckResultDto, LotteryApi, RateLimitedError, Rule
 export interface TicketDraft {
   whites: (number | null)[];
   special: number | null;
+  /** Checkbox state: whether this ticket's detailed history is shown. */
+  selected: boolean;
 }
 
 export const MIN_TICKETS = 1;
 export const MAX_TICKETS = 10;
 
 function emptyTicket(): TicketDraft {
-  return { whites: [null, null, null, null, null], special: null };
+  return { whites: [null, null, null, null, null], special: null, selected: true };
 }
 
 function isCheckable(ticket: TicketDraft, era: RuleEraDto | null): boolean {
@@ -32,8 +34,6 @@ export class CheckerStore {
   readonly game = signal<Game>('powerball');
   readonly tickets = signal<TicketDraft[]>([emptyTicket()]);
   readonly era = signal<RuleEraDto | null>(null);
-  /** Which ticket to check and show: a zero-based index, or every ticket. */
-  readonly selectedTicket = signal<number | 'all'>('all');
   /** Parallel to tickets; null until a check has run; unselected tickets stay null. */
   readonly results = signal<(CheckResultDto | null)[] | null>(null);
   readonly busy = signal(false);
@@ -42,20 +42,19 @@ export class CheckerStore {
   readonly pageSize = signal<number | 'all'>(10);
 
   readonly count = computed(() => this.tickets().length);
+  readonly selectedCount = computed(() => this.tickets().filter((t) => t.selected).length);
 
   isSelected(index: number): boolean {
-    const selected = this.selectedTicket();
-    return selected === 'all' || selected === index;
+    return this.tickets()[index]?.selected ?? false;
   }
 
   /** Client-side validation mirrors the server's (which stays authoritative). */
   readonly validationError = computed<string | null>(() => {
     const era = this.era();
     if (!era) return null;
-    const selected = this.selectedTicket();
 
     for (const [index, ticket] of this.tickets().entries()) {
-      if (selected !== 'all' && selected !== index) continue;
+      if (!ticket.selected) continue;
       const filled = ticket.whites.filter((w): w is number => w != null);
       if (filled.length < 5 || ticket.special == null) continue; // incomplete, not invalid
       const label = this.tickets().length > 1 ? `Ticket ${index + 1}: ` : '';
@@ -73,7 +72,10 @@ export class CheckerStore {
     .every((t) => t.special != null && t.whites.every((w) => w != null)));
 
   readonly canCheck = computed(() =>
-    !this.busy() && this.allComplete() && this.validationError() === null);
+    !this.busy()
+    && this.selectedCount() > 0
+    && this.allComplete()
+    && this.validationError() === null);
 
   constructor() {
     void this.loadEra();
@@ -93,17 +95,15 @@ export class CheckerStore {
       while (next.length < count) next.push(emptyTicket());
       return next;
     });
-    // A selection pointing past the new count would silently check nothing.
-    const selected = this.selectedTicket();
-    if (selected !== 'all' && selected >= count) this.selectedTicket.set('all');
     this.results.set(null);
   }
 
-  // Selection is a VIEW filter: every complete ticket is checked regardless
-  // (so big wins can surface on unselected tickets), so switching the
-  // selection never discards results.
-  setSelectedTicket(value: number | 'all'): void {
-    this.selectedTicket.set(value);
+  // The checkboxes are a VIEW filter: every complete ticket is checked
+  // regardless (so big wins can surface on unselected tickets), so toggling
+  // a checkbox never discards results.
+  toggleSelected(ticket: number): void {
+    this.tickets.update((tickets) => tickets.map((t, ti) =>
+      ti === ticket ? { ...t, selected: !t.selected } : t));
   }
 
   setWhite(ticket: number, index: number, value: number | null): void {
@@ -125,7 +125,7 @@ export class CheckerStore {
   async generate(): Promise<void> {
     await this.run(async () => {
       const picks = await this.api.generate(this.game(), this.count());
-      this.tickets.set(picks.tickets.map((t) => ({ whites: [...t.whiteBalls], special: t.special })));
+      this.tickets.set(picks.tickets.map((t) => ({ whites: [...t.whiteBalls], special: t.special, selected: true })));
       this.results.set(null);
     });
   }

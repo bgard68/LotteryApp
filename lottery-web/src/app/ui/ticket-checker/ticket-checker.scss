@@ -55,11 +55,17 @@ select, input, button {
 }
 
 .which {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--muted);
+}
+
+.ticket-row input.pick {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--hit-color);
+  cursor: pointer;
 }
 
 .tickets {
