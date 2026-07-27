@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Innermost layer: no project or package dependencies. -->
+</Project>

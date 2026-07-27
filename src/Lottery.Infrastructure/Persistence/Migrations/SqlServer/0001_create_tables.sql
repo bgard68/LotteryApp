@@ -1,0 +1,24 @@
+CREATE TABLE Draws (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    Game NVARCHAR(20) NOT NULL,
+    DrawDate DATE NOT NULL,
+    White1 TINYINT NOT NULL,
+    White2 TINYINT NOT NULL,
+    White3 TINYINT NOT NULL,
+    White4 TINYINT NOT NULL,
+    White5 TINYINT NOT NULL,
+    Special TINYINT NOT NULL,
+    JackpotAmount DECIMAL(15,2) NULL,
+    JackpotWon BIT NULL
+);
+
+CREATE UNIQUE INDEX UX_Draws_Game_DrawDate ON Draws (Game, DrawDate);
+
+CREATE TABLE ImportLedger (
+    Game NVARCHAR(20) NOT NULL PRIMARY KEY,
+    Source NVARCHAR(100) NOT NULL,
+    CompletedAtUtc DATETIMEOFFSET NOT NULL,
+    DrawCount INT NOT NULL,
+    EarliestDraw DATE NOT NULL,
+    LatestDraw DATE NOT NULL
+);
