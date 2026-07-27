@@ -3,15 +3,23 @@ using Lottery.Domain;
 
 namespace Lottery.Infrastructure.Feeds;
 
-/// <summary>Routes each game to its source-specific jackpot adapter.</summary>
+/// <summary>
+/// Routes each game to its jackpot sources, first-success wins:
+/// - Mega Millions: megamillions.com (richest payload: rollover + last jackpot).
+/// - Powerball: NY Lottery API (primary), then the retired powerball.com
+///   endpoint as a just-in-case fallback.
+/// </summary>
 public sealed class CompositeJackpotFeed(
+    NyLotteryJackpotFeed nyLottery,
     PowerballJackpotFeed powerball,
     MegaMillionsJackpotFeed megaMillions) : IJackpotFeed
 {
-    public Task<JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct) => game switch
+    public async Task<JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct)
     {
-        Game.Powerball => powerball.GetJackpotAsync(game, ct),
-        Game.MegaMillions => megaMillions.GetJackpotAsync(game, ct),
-        _ => Task.FromResult<JackpotInfo?>(null),
-    };
+        if (game == Game.MegaMillions)
+            return await megaMillions.GetJackpotAsync(game, ct);
+
+        return await nyLottery.GetJackpotAsync(game, ct)
+            ?? await powerball.GetJackpotAsync(game, ct);
+    }
 }

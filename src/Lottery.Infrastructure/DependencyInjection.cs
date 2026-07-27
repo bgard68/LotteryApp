@@ -42,6 +42,7 @@ public static class DependencyInjection
         // clients must not be captured by singletons or handler rotation stops.
         services.AddHttpClient<SocrataWinningNumbersFeed>().AddStandardResilienceHandler();
         services.AddTransient<IWinningNumbersFeed>(sp => sp.GetRequiredService<SocrataWinningNumbersFeed>());
+        services.AddHttpClient<NyLotteryJackpotFeed>().AddStandardResilienceHandler();
         services.AddHttpClient<PowerballJackpotFeed>().AddStandardResilienceHandler();
         services.AddHttpClient<MegaMillionsJackpotFeed>().AddStandardResilienceHandler();
         services.AddTransient<IJackpotFeed, CompositeJackpotFeed>();

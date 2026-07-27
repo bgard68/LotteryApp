@@ -58,6 +58,38 @@ public class FeedParsingTests
         Assert.Equal(277_300_000m, info.NextCashValue);
     }
 
+    // Captured from nylottery.ny.gov/nyl-api/games/powerball/draws, 2026-07-27 (trimmed).
+    private const string NyFixture =
+        """
+        {"data":{"draws":[
+          {"drawTime":1785124800000,"wagerAvailable":true,"estimatedJackpot":633000000,
+           "jackpots":[{"amount":633000000,"cashAmount":277300000}],
+           "gameId":"15","gameName":"powerball","drawNumber":1978,"status":4},
+          {"drawTime":1784952000000,"gameId":"15","gameName":"powerball","drawNumber":1977,"status":22,
+           "results":[{"primary":["3","4","24","36","47"],"secondary":["17"]}]}
+        ]}}
+        """;
+
+    [Fact]
+    public async Task NyLottery_ParsesRealPayload()
+    {
+        var handler = new StubHandler(NyFixture);
+        var feed = new NyLotteryJackpotFeed(new HttpClient(handler));
+
+        var info = await feed.GetJackpotAsync(Lottery.Domain.Game.Powerball, CancellationToken.None);
+
+        Assert.NotNull(info);
+        Assert.Equal(633_000_000m, info!.NextEstimatedJackpot);
+        Assert.Equal(277_300_000m, info.NextCashValue);
+    }
+
+    [Fact]
+    public async Task NyLottery_UnexpectedShape_DegradesToNull()
+    {
+        var feed = new NyLotteryJackpotFeed(new HttpClient(new StubHandler("""{"unexpected":true}""")));
+        Assert.Null(await feed.GetJackpotAsync(Lottery.Domain.Game.Powerball, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData("$633 Million", 633_000_000L)]
     [InlineData("$277.3 Million", 277_300_000L)]
