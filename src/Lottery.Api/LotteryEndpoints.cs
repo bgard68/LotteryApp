@@ -10,15 +10,18 @@ public static class LotteryEndpoints
     {
         var api = app.MapGroup("/api/{game}");
 
-        api.MapGet("/next-draw", (string game, GetNextDraw useCase) =>
-            WithGame(game, g =>
+        api.MapGet("/next-draw", async (string game, GetNextDraw useCase, CancellationToken ct) =>
+            await WithGameAsync(game, async g =>
             {
-                var result = useCase.Execute(g);
+                var result = await useCase.ExecuteAsync(g, ct);
                 return Results.Ok(new
                 {
                     game = g.ToString(),
                     drawDate = result.DrawDate,
                     drawTimeUtc = result.DrawTimeUtc,
+                    estimatedJackpot = result.EstimatedJackpot,
+                    cashValue = result.CashValue,
+                    jackpotUpdatedAtUtc = result.JackpotUpdatedAtUtc,
                 });
             }));
 
@@ -104,6 +107,34 @@ public static class LotteryEndpoints
                 var picks = useCase.Execute(g);
                 return Results.Ok(new { game = g.ToString(), whiteBalls = picks.WhiteBalls, special = picks.Special });
             }));
+
+        // Refresh trigger for the keep-alive workflow (and manual catch-up).
+        // Optionally guarded by a shared key: set Refresh:Key in the environment
+        // (never in a committed file) and callers send X-Refresh-Key.
+        app.MapPost("/internal/refresh", async (HttpRequest request, RefreshGame refresh,
+            IConfiguration configuration, CancellationToken ct) =>
+        {
+            var requiredKey = configuration["Refresh:Key"];
+            if (!string.IsNullOrEmpty(requiredKey)
+                && request.Headers["X-Refresh-Key"].ToString() != requiredKey)
+            {
+                return Results.Unauthorized();
+            }
+
+            var results = new List<RefreshResult>();
+            foreach (var game in Enum.GetValues<Game>())
+                results.Add(await refresh.ExecuteAsync(game, ct));
+
+            return Results.Ok(results.Select(r => new
+            {
+                game = r.Game.ToString(),
+                upToDate = r.UpToDate,
+                newDraws = r.NewDraws,
+                skippedInvalid = r.SkippedInvalid,
+                jackpotUpdated = r.JackpotUpdated,
+                feedError = r.FeedError,
+            }));
+        });
     }
 
     private static bool TryParseGame(string value, out Game game)

@@ -44,6 +44,48 @@ public sealed class FakeDrawRepository : IDrawRepository
         Draws.AddRange(draws);
         return Task.CompletedTask;
     }
+
+    public Task UpdateJackpotAsync(Game game, DateOnly drawDate, decimal? jackpotAmount, bool? jackpotWon, CancellationToken ct)
+    {
+        var index = Draws.FindIndex(d => d.Game == game && d.DrawDate == drawDate);
+        if (index >= 0)
+            Draws[index] = Draws[index] with { JackpotAmount = jackpotAmount, JackpotWon = jackpotWon };
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class FakeJackpotStore : Lottery.Application.Abstractions.IJackpotStore
+{
+    public Lottery.Application.Abstractions.JackpotEstimate? Saved { get; private set; }
+
+    public Task<Lottery.Application.Abstractions.JackpotEstimate?> GetAsync(Game game, CancellationToken ct) =>
+        Task.FromResult(Saved?.Game == game ? Saved : null);
+
+    public Task SaveAsync(Lottery.Application.Abstractions.JackpotEstimate estimate, CancellationToken ct)
+    {
+        Saved = estimate;
+        return Task.CompletedTask;
+    }
+}
+
+public sealed class FakeNumbersFeed(IReadOnlyList<Draw> draws) : Lottery.Application.Abstractions.IWinningNumbersFeed
+{
+    public Exception? ThrowOnFetch { get; set; }
+    public DateOnly? LastRequestedAfter { get; private set; }
+
+    public Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct)
+    {
+        if (ThrowOnFetch is not null) throw ThrowOnFetch;
+        LastRequestedAfter = after;
+        return Task.FromResult<IReadOnlyList<Draw>>(
+            draws.Where(d => d.Game == game && d.DrawDate > after).OrderBy(d => d.DrawDate).ToList());
+    }
+}
+
+public sealed class FakeJackpotFeed(Lottery.Application.Abstractions.JackpotInfo? info) : Lottery.Application.Abstractions.IJackpotFeed
+{
+    public Task<Lottery.Application.Abstractions.JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct) =>
+        Task.FromResult(info?.Game == game ? info : null);
 }
 
 public sealed class FakeImportLedger : IImportLedger

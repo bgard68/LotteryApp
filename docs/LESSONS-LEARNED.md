@@ -107,7 +107,61 @@ idiom is `.vscode/*` (ignore contents) plus negations.
 use the `dir/*` + `!dir/file` idiom when re-including; verify with
 `git check-ignore -v`.
 
-## 8. GitHub `.github/README.md` shadows the root README
+## 8. The undocumented-endpoint risk materialized - before a line of feed code was written (Phase 2)
+
+**Symptom:** the powerball.com JSON API the design named as the jackpot source
+(`/api/v1/estimates/powerball?_format=json`) no longer exists: it now returns
+the SPA homepage, the site is server-rendered (no XHR data calls to borrow),
+and it sits behind bot protection that empty-handed both PowerShell and curl.
+
+**Fix:** the design's own fallback: draw dates come from schedule math (never
+needed a feed), Powerball jackpot amounts are null end-to-end and hidden in
+the UI, and a best-effort adapter (with a contract test for the old payload
+shape) stays in place should MUSL restore an endpoint. Mega Millions' service
+works fully and supplies estimate, cash value, and rollover status.
+**Lesson:** treat every undocumented endpoint as already dead when designing -
+"nullable + hide gracefully + fallback for the critical part" meant this
+discovery cost an hour, not a redesign. Probe sources *before* building
+against them.
+
+## 9. Windows PowerShell can't decompress modern web responses
+
+**Symptom:** probing endpoints with `Invoke-WebRequest`/`Invoke-RestMethod`
+returned binary garbage (Brotli-compressed bodies PS 5.1 cannot decode), and
+`curl.exe --compressed` returned empty (bot-protected TLS). The endpoint's
+true status was only visible in a real browser.
+
+**Lesson:** when probing an API, garbage or empty output is not proof the
+endpoint is dead - check compression (`Accept-Encoding`) and bot protection
+before concluding; a real browser is the ground truth.
+
+## 10. xUnit InlineData cannot widen int to long?
+
+**Symptom:** `[InlineData("$633 Million", 633_000_000)]` into a
+`long? expected` parameter failed at runtime with "Object of type
+'System.Int32' cannot be converted to type 'System.Nullable`1[System.Int64]'" -
+xUnit stores InlineData values as boxed objects and does not perform numeric
+widening into nullable parameters.
+
+**Fix:** explicit `L` suffixes (`633_000_000L`).
+**Lesson:** InlineData literals must match the parameter type exactly when the
+parameter is nullable; the C# compiler's implicit conversions don't apply to
+boxed theory data.
+
+## 11. Typed HttpClients must not be captured by singletons
+
+**Near-miss during DI wiring:** the first draft registered feed adapters
+(typed `HttpClient` classes) as singletons. A singleton captures one
+`HttpClient` forever, which defeats `IHttpClientFactory`'s handler rotation
+and eventually causes stale-DNS failures in long-running services.
+
+**Fix:** feeds and the `RefreshGame` use case that consumes them are
+transient; the hosted service resolves them through a scope per refresh cycle.
+**Lesson:** anything registered via `AddHttpClient<T>` is transient by
+contract - every consumer up the chain must be transient/scoped, or resolve
+through `IServiceScopeFactory`.
+
+## 12. GitHub `.github/README.md` shadows the root README
 
 **Near-miss while writing docs:** GitHub's README display precedence is
 `.github/` > repo root > `docs/`. Dropping a "workflows readme" at

@@ -16,9 +16,9 @@ $failures = @()
 $passes = 0
 
 function Invoke-Api {
-    param([string]$Path)
+    param([string]$Path, [string]$Method = "GET")
     try {
-        $response = Invoke-WebRequest -Uri "$BaseUrl$Path" -UseBasicParsing -TimeoutSec 30
+        $response = Invoke-WebRequest -Uri "$BaseUrl$Path" -Method $Method -UseBasicParsing -TimeoutSec 90
         return @{ Status = [int]$response.StatusCode; Body = $response.Content }
     }
     catch {
@@ -45,8 +45,8 @@ function Invoke-Api {
 }
 
 function Assert-Api {
-    param([string]$Name, [string]$Path, [int]$ExpectedStatus, [string]$BodyContains = $null)
-    $result = Invoke-Api -Path $Path
+    param([string]$Name, [string]$Path, [int]$ExpectedStatus, [string]$BodyContains = $null, [string]$Method = "GET")
+    $result = Invoke-Api -Path $Path -Method $Method
     $ok = $result.Status -eq $ExpectedStatus
     if ($ok -and $BodyContains) { $ok = $result.Body -match [regex]::Escape($BodyContains) }
     if ($ok) {
@@ -86,6 +86,9 @@ Assert-Api "check white out of era -> 400"  "/api/powerball/check?whites=1,2,3,4
 Assert-Api "check special out of era -> 400" "/api/powerball/check?whites=1,2,3,4,5&special=27" 400 "between 1 and 26"
 Assert-Api "check non-numeric white -> 400" "/api/powerball/check?whites=1,2,3,4,abc&special=5" 400 "not a number"
 Assert-Api "mm special out of era -> 400"   "/api/megamillions/check?whites=1,2,3,4,5&special=25" 400 "between 1 and 24"
+
+# --- Refresh trigger (Phase 2) - always 200; feed failures are reported in-body ---
+Assert-Api "internal refresh" "/internal/refresh" 200 "upToDate" -Method POST
 
 Write-Host ""
 if ($failures.Count -gt 0) {

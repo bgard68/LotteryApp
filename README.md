@@ -46,9 +46,13 @@ speculative abstractions. Notably **no MediatR** - [why below](#why-no-mediatr).
 1. **First boot**: DbUp migrates the database, then the one-time import seeds
    ~4,500 real drawings from committed JSON snapshots (no network needed). An
    `ImportLedger` row per game guarantees the import never runs twice.
-2. **Ongoing** (Phase 2): a background service wakes after each drawing
-   (Mon/Wed/Sat 10:59 PM ET for Powerball, Tue/Fri 11:00 PM ET for Mega Millions)
-   and stores the new result. Until the feed publishes, the drawing is `Pending`.
+2. **Ongoing**: a background service (`DrawRefreshService`) wakes shortly after
+   each drawing (Mon/Wed/Sat 10:59 PM ET for Powerball, Tue/Fri 11:00 PM ET for
+   Mega Millions), pulls new results from the live NY Open Data feed, and
+   refreshes jackpot data - polling with backoff until the feed publishes.
+   Until then the drawing is `Pending`. Startup runs a gap-repair pass, and
+   `POST /internal/refresh` triggers the same cycle on demand (the keep-alive
+   workflow's target), so downtime self-heals.
 3. **User requests** only ever read the local database - no user action triggers
    an external call.
 
@@ -65,6 +69,7 @@ dotnet run --project src/Lottery.Api
 | `GET /api/{game}/rule-eras` | Number-matrix eras over time |
 | `GET /api/{game}/generate` | Random era-valid picks |
 | `GET /healthz` | Health (used by keep-alive + smoke test) |
+| `POST /internal/refresh` | Trigger a refresh cycle (optional `X-Refresh-Key` guard via env config) |
 
 `{game}` = `powerball` or `megamillions`. `/check` is GET on purpose: it reads
 data and changes nothing, so it is cacheable and testable with a plain URL.
@@ -114,16 +119,22 @@ This is a recorded decision - please don't add it out of habit.
 
 ## Data: where numbers come from
 
-- **Historical numbers** (in the repo now): committed JSON snapshots in
+- **Historical numbers**: committed JSON snapshots in
   `src/Lottery.Infrastructure/Seeding/Data/`, captured from the **NY Open Data**
   (Socrata) public datasets - Powerball `d6yy-54nr` (1,971 draws since 2010),
   Mega Millions `5xaw-6ayf` (2,522 draws since 2002). Committed snapshots make
-  first boot offline and deterministic; the live Socrata feed will refresh and
-  gap-repair in Phase 2.
-- **Draw dates + jackpot amounts** (Phase 2): the official **powerball.com** and
-  **megamillions.com** JSON endpoints. These are undocumented, so the schedule
-  math acts as a fallback for dates and jackpot amounts hide gracefully if the
-  endpoints change. No HTML scraping, ever - layout changes break scrapers.
+  first boot offline and deterministic.
+- **New drawings**: the live Socrata feed (same datasets) via
+  `SocrataWinningNumbersFeed` - incremental "everything after the latest stored
+  draw", which doubles as gap-repair after downtime.
+- **Jackpot amounts**: **megamillions.com**'s JSON service provides Mega
+  Millions estimates, cash values, and rollover status (fully working).
+  **powerball.com retired its public JSON API** (the old route now serves the
+  SPA behind bot protection), so Powerball jackpot amounts are null and the UI
+  hides them - the graceful-degradation path the design planned for, with a
+  best-effort adapter kept in place should MUSL restore an endpoint. Draw
+  *dates* never depend on any feed: the schedule math computes them. No HTML
+  scraping, ever - layout changes break scrapers.
 - **Rule changes are data, not code**: `RuleEras` records every documented
   matrix change (7 Powerball eras back to 1992, 5 Mega Millions eras). Every
   imported draw is validated against its era; a test validates the entire
@@ -207,7 +218,7 @@ reseeds on next start).
 ## Smoke test (PowerShell)
 
 [`scripts/smoke-test.ps1`](scripts/README.md) exercises **every endpoint,
-including error conditions** - 22 checks: happy paths for both games plus
+including error conditions** - 23 checks: happy paths for both games plus
 404 for unknown games and 400s for malformed tickets (too few numbers,
 duplicates, out-of-era values, non-numeric input). It runs three ways: locally
 against a dev server, in CI, and as the **post-deploy gate** - a failed smoke
@@ -223,10 +234,10 @@ pwsh scripts/smoke-test.ps1 -BaseUrl http://localhost:5000
 dotnet test
 ```
 
-49 tests, all layers - including DST-boundary schedule tests driven by
-`FakeTimeProvider` and an **era-coverage test** that validates all 4,493
-historical draws against the rule-era table. Details in
-[tests/README.md](tests/README.md).
+66 tests, all layers - including DST-boundary schedule tests driven by
+`FakeTimeProvider`, an **era-coverage test** that validates all 4,493
+historical draws against the rule-era table, and feed contract tests against
+recorded real payloads. Details in [tests/README.md](tests/README.md).
 
 ## Requirements and design decisions
 

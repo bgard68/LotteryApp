@@ -23,6 +23,27 @@ Back to the [main README](../../README.md).
   the assembly, run by DbUp at startup. Two provider folders (`Sqlite/`,
   `SqlServer/`) share the same numbering and must stay in lockstep.
 
+## Feeds (`Feeds/`)
+
+Live external sources, all behind typed `HttpClient`s with the standard
+resilience pipeline (retry + circuit breaker + timeout), registered transient
+so handler rotation keeps working:
+
+- **`SocrataWinningNumbersFeed`** (`IWinningNumbersFeed`) - the live NY Open
+  Data client; fetches everything after the latest stored draw (incremental
+  refresh = gap-repair). Optional `Feeds:SocrataAppToken` raises rate limits.
+- **`MegaMillionsJackpotFeed`** - megamillions.com's XML-wrapped JSON service:
+  last drawing's jackpot + winner count (rollover) and the next estimate/cash
+  value. Parsed defensively; any shape change degrades to null.
+- **`PowerballJackpotFeed`** - best-effort only: powerball.com retired its
+  public JSON API (the route now serves the SPA behind bot protection), so
+  this adapter returns null unless MUSL restores the endpoint, and Powerball
+  jackpot amounts stay hidden in the UI.
+- **`CompositeJackpotFeed`** routes each game to its adapter.
+
+Feed failures are *reported, never thrown* - `RefreshGame` records the error
+and the app keeps serving whatever it has.
+
 ## Seeding (`Seeding/`)
 
 `SnapshotHistorySource` reads the committed JSON snapshots in `Seeding/Data/`

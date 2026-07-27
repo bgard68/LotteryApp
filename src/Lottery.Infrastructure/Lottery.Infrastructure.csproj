@@ -3,6 +3,9 @@
     <ProjectReference Include="..\Lottery.Application\Lottery.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Lottery.Infrastructure.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Dapper" />
     <PackageReference Include="dbup-sqlite" />
     <PackageReference Include="dbup-sqlserver" />

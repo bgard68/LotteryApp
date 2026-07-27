@@ -32,6 +32,16 @@ Design notes:
   directly, so renaming a domain property can't silently break the API
   contract.
 
+## Background refresh (`DrawRefreshService.cs`)
+
+A hosted service that sleeps (via `TimeProvider`, so tests could drive it on
+virtual time) until shortly after the next scheduled drawing, then polls the
+feeds every 10 minutes for up to 2 hours until results publish. Startup runs a
+gap-repair pass, and `POST /internal/refresh` triggers the same cycle on
+demand - optionally guarded by an `X-Refresh-Key` header when `Refresh:Key`
+is set in the environment (never in a committed file). If the host was asleep
+at draw time, the next startup or refresh call self-heals.
+
 ## Configuration
 
 `appsettings.json` holds the non-secret baseline (`Database:Provider: Sqlite`);

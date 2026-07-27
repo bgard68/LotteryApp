@@ -4,7 +4,7 @@ Back to the [main README](../../README.md).
 
 ## smoke-test.ps1
 
-End-to-end verification of a **running** API - 22 checks covering every
+End-to-end verification of a **running** API - 23 checks covering every
 endpoint, both games, happy paths **and error conditions**:
 
 - Health first (`/healthz`) - fail fast if the stack is down.
@@ -12,6 +12,9 @@ endpoint, both games, happy paths **and error conditions**:
   generate, and ticket checks for both games.
 - Error conditions: unknown game (404), missing/short/duplicate/out-of-era/
   non-numeric ticket parameters (400 with the expected reason in the body).
+- `POST /internal/refresh` - always 200 (feed failures are reported in the
+  response body, not as HTTP errors), so this check stays deterministic even
+  when external feeds are down.
 
 ```powershell
 # local dev server

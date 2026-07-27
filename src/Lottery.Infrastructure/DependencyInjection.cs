@@ -1,6 +1,7 @@
 using Lottery.Application.Abstractions;
 using Lottery.Application.UseCases;
 using Lottery.Domain;
+using Lottery.Infrastructure.Feeds;
 using Lottery.Infrastructure.Persistence;
 using Lottery.Infrastructure.Seeding;
 using Microsoft.Extensions.Configuration;
@@ -34,6 +35,16 @@ public static class DependencyInjection
         services.AddSingleton<IDrawRepository, DrawRepository>();
         services.AddSingleton<IImportLedger, ImportLedgerRepository>();
         services.AddSingleton<IHistorySource, SnapshotHistorySource>();
+        services.AddSingleton<IJackpotStore, JackpotStoreRepository>();
+
+        // Live feeds: typed HttpClients with the standard resilience pipeline
+        // (retry + circuit breaker + timeout). Registered transient - typed
+        // clients must not be captured by singletons or handler rotation stops.
+        services.AddHttpClient<SocrataWinningNumbersFeed>().AddStandardResilienceHandler();
+        services.AddTransient<IWinningNumbersFeed>(sp => sp.GetRequiredService<SocrataWinningNumbersFeed>());
+        services.AddHttpClient<PowerballJackpotFeed>().AddStandardResilienceHandler();
+        services.AddHttpClient<MegaMillionsJackpotFeed>().AddStandardResilienceHandler();
+        services.AddTransient<IJackpotFeed, CompositeJackpotFeed>();
 
         services.AddSingleton<GetNextDraw>();
         services.AddSingleton<GetLatestDraw>();
@@ -42,6 +53,7 @@ public static class DependencyInjection
         services.AddSingleton<GeneratePicks>();
         services.AddSingleton<GetRuleEras>();
         services.AddSingleton<ImportHistory>();
+        services.AddTransient<RefreshGame>(); // transient: depends on typed HttpClient feeds
 
         return services;
     }

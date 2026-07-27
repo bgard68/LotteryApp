@@ -14,6 +14,9 @@ Back to the [main README](../../README.md).
 | `IImportLedger` | Dapper repository | Records completed one-time imports so they never re-run |
 | `IHistorySource` | Snapshot reader (Phase 2 adds the live feed) | Where historical numbers come from |
 | `IDatabaseInitializer` | DbUp runner | Schema migrations at startup |
+| `IWinningNumbersFeed` | Live Socrata client | New draws after a date (refresh + gap-repair) |
+| `IJackpotFeed` | Composite of per-game adapters | Jackpot info; everything nullable by design |
+| `IJackpotStore` | Dapper repository | Persisted latest estimate per game |
 
 ## Use cases (`UseCases/`)
 
@@ -32,6 +35,9 @@ reasoning). One class per user-facing operation:
 - `ImportHistory` - the one-time seed: ledger check -> validate every draw
   against its era -> bulk insert -> write ledger. Any violation aborts before
   anything is written
+- `RefreshGame` - one refresh cycle: gap-repair new draws from the live feed
+  (era-validating each; invalid rows are skipped and counted), then refresh
+  jackpot data. Feed failures are reported in the result, never thrown
 
 `TimeProvider` is injected everywhere time matters, so tests drive these
 classes with `FakeTimeProvider` and virtual time.

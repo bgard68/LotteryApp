@@ -1,0 +1,61 @@
+using System.Text.Json;
+using System.Xml.Linq;
+using Lottery.Application.Abstractions;
+using Lottery.Domain;
+
+namespace Lottery.Infrastructure.Feeds;
+
+/// <summary>
+/// megamillions.com utility service: XML-wrapped JSON carrying the last drawing,
+/// current/next jackpot pools, cash values, and jackpot winner count (winner
+/// count zero = rollover). Undocumented endpoint - parsed defensively; any
+/// shape change degrades to null rather than throwing.
+/// </summary>
+public sealed class MegaMillionsJackpotFeed(HttpClient http) : IJackpotFeed
+{
+    private const string Endpoint = "https://www.megamillions.com/cmspages/utilservice.asmx/GetLatestDrawData";
+
+    public async Task<JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct)
+    {
+        if (game != Game.MegaMillions)
+            return null;
+
+        var xml = await http.GetStringAsync(Endpoint, ct);
+        var json = XDocument.Parse(xml).Root?.Value;
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        var payload = JsonSerializer.Deserialize<MmPayload>(json, JsonOptions);
+        if (payload?.Jackpot is null)
+            return null;
+
+        DateOnly? lastDrawDate = DateTime.TryParse(payload.Jackpot.PlayDate, out var d)
+            ? DateOnly.FromDateTime(d)
+            : null;
+
+        return new JackpotInfo(
+            Game.MegaMillions,
+            lastDrawDate,
+            payload.Jackpot.CurrentPrizePool,
+            payload.Jackpot.Winners is int w ? w > 0 : null,
+            payload.Jackpot.NextPrizePool,
+            payload.Jackpot.NextCashValue);
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    internal sealed class MmPayload
+    {
+        public MmJackpot? Jackpot { get; set; }
+    }
+
+    internal sealed class MmJackpot
+    {
+        public string? PlayDate { get; set; }
+        public decimal? CurrentPrizePool { get; set; }
+        public decimal? NextPrizePool { get; set; }
+        public decimal? CurrentCashValue { get; set; }
+        public decimal? NextCashValue { get; set; }
+        public int? Winners { get; set; }
+    }
+}

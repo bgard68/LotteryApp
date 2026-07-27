@@ -104,6 +104,21 @@ public sealed class DrawRepository(IDbConnectionFactory factory) : IDrawReposito
         return affected > 0;
     }
 
+    public async Task UpdateJackpotAsync(Game game, DateOnly drawDate, decimal? jackpotAmount, bool? jackpotWon, CancellationToken ct)
+    {
+        await using var conn = await factory.OpenAsync(ct);
+        await conn.ExecuteAsync(new CommandDefinition(
+            "UPDATE Draws SET JackpotAmount = @jackpotAmount, JackpotWon = @jackpotWon " +
+            "WHERE Game = @game AND DrawDate = @drawDate",
+            new
+            {
+                game = game.ToString(),
+                drawDate = drawDate.ToString("yyyy-MM-dd"),
+                jackpotAmount,
+                jackpotWon,
+            }, cancellationToken: ct));
+    }
+
     public async Task BulkInsertAsync(IReadOnlyList<Draw> draws, CancellationToken ct)
     {
         await using var conn = await factory.OpenAsync(ct);

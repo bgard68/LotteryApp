@@ -19,4 +19,7 @@ public interface IDrawRepository
 
     /// <summary>Bulk insert for the one-time historical import, single transaction.</summary>
     Task BulkInsertAsync(IReadOnlyList<Draw> draws, CancellationToken ct);
+
+    /// <summary>Attach jackpot facts (amount, won) to an already-stored draw.</summary>
+    Task UpdateJackpotAsync(Game game, DateOnly drawDate, decimal? jackpotAmount, bool? jackpotWon, CancellationToken ct);
 }

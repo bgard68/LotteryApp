@@ -10,6 +10,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks();
+builder.Services.AddHostedService<DrawRefreshService>();
 
 // Public anonymous API: modest per-client ceiling so a scraper cannot run up
 // compute; generous enough that no human ever notices.
