@@ -58,7 +58,7 @@ public sealed class DrawRepository(IDbConnectionFactory factory) : IDrawReposito
         // Set-wise white matching in SQL: each stored column tested against the
         // ticket's five values. Order-independent by construction.
         const string sql = """
-            SELECT DrawDate,
+            SELECT DrawDate, White1, White2, White3, White4, White5, Special,
                    (CASE WHEN White1 IN (@w1,@w2,@w3,@w4,@w5) THEN 1 ELSE 0 END
                   + CASE WHEN White2 IN (@w1,@w2,@w3,@w4,@w5) THEN 1 ELSE 0 END
                   + CASE WHEN White3 IN (@w1,@w2,@w3,@w4,@w5) THEN 1 ELSE 0 END
@@ -76,7 +76,8 @@ public sealed class DrawRepository(IDbConnectionFactory factory) : IDrawReposito
             """;
 
         await using var conn = await factory.OpenAsync(ct);
-        var rows = await conn.QueryAsync<(string DrawDate, int WhiteMatches, int SpecialMatched)>(new CommandDefinition(
+        var rows = await conn.QueryAsync<(string DrawDate, int White1, int White2, int White3, int White4, int White5,
+            int Special, int WhiteMatches, int SpecialMatched)>(new CommandDefinition(
             sql,
             new
             {
@@ -86,7 +87,12 @@ public sealed class DrawRepository(IDbConnectionFactory factory) : IDrawReposito
             }, cancellationToken: ct));
 
         return rows
-            .Select(r => new MatchRow(DateOnly.Parse(r.DrawDate.AsSpan(0, 10)), r.WhiteMatches, r.SpecialMatched == 1))
+            .Select(r => new MatchRow(
+                DateOnly.Parse(r.DrawDate.AsSpan(0, 10)),
+                [r.White1, r.White2, r.White3, r.White4, r.White5],
+                r.Special,
+                r.WhiteMatches,
+                r.SpecialMatched == 1))
             .ToList();
     }
 

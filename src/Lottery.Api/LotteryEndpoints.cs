@@ -90,6 +90,8 @@ public static class LotteryEndpoints
                             drawDate = m.DrawDate,
                             whiteMatches = m.WhiteMatches,
                             specialMatched = m.SpecialMatched,
+                            drawnWhiteBalls = m.DrawnWhiteBalls,
+                            drawnSpecial = m.DrawnSpecial,
                             tier = m.TierName,
                             approximateAmount = m.ApproximateAmount,
                             isJackpot = m.IsJackpot,
@@ -101,11 +103,22 @@ public static class LotteryEndpoints
         api.MapGet("/rule-eras", (string game, GetRuleEras useCase) =>
             WithGame(game, g => Results.Ok(useCase.Execute(g))));
 
-        api.MapGet("/generate", (string game, GeneratePicks useCase) =>
+        api.MapGet("/generate", (string game, int? count, GeneratePicks useCase) =>
             WithGame(game, g =>
             {
-                var picks = useCase.Execute(g);
-                return Results.Ok(new { game = g.ToString(), whiteBalls = picks.WhiteBalls, special = picks.Special });
+                var requested = count ?? 1;
+                if (requested is < GeneratePicks.MinCount or > GeneratePicks.MaxCount)
+                    return Results.BadRequest(new
+                    {
+                        error = $"count must be between {GeneratePicks.MinCount} and {GeneratePicks.MaxCount}.",
+                    });
+
+                var picks = useCase.Execute(g, requested);
+                return Results.Ok(new
+                {
+                    game = g.ToString(),
+                    tickets = picks.Tickets.Select(t => new { whiteBalls = t.WhiteBalls, special = t.Special }),
+                });
             }));
 
         // Refresh trigger for the keep-alive workflow (and manual catch-up).

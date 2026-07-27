@@ -2,7 +2,13 @@ using Lottery.Domain;
 
 namespace Lottery.Application.Abstractions;
 
-public sealed record MatchRow(DateOnly DrawDate, int WhiteMatches, bool SpecialMatched);
+/// <summary>Carries the drawn numbers so the UI can highlight which of the ticket's numbers hit.</summary>
+public sealed record MatchRow(
+    DateOnly DrawDate,
+    IReadOnlyList<int> DrawnWhiteBalls,
+    int DrawnSpecial,
+    int WhiteMatches,
+    bool SpecialMatched);
 
 public interface IDrawRepository
 {
