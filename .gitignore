@@ -108,3 +108,25 @@ ApplicationInsights.config
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---------- AI assistant / editor-agent local state - never committed ----------
+# Session state, permissions, and launch configs are personal tooling, not
+# project code. Applies to the whole tree on every branch.
+.claude/
+.mcp.json
+.cursor/
+.aider*
+
+# ---------- Additional credential hardening ----------
+# Belt-and-braces beyond the config & secrets section above: common token/
+# credential file shapes that should never exist in the tree at all.
+.netrc
+_netrc
+*.token
+*.credentials
+credentials.json
+service-account*.json
+*.keystore
+id_rsa*
+id_ed25519*
+*.asc
