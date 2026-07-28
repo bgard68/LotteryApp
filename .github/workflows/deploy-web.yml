@@ -1,20 +1,19 @@
 name: Deploy frontend
 
-# SKELETON - manual trigger only until the Azure Static Web App exists.
-# Once provisioned and linked to the App Service (SWA "linked backend"
-# proxies /api/* -> same origin, no CORS; decision D15):
-#   1. Set the repo secret AZURE_STATIC_WEB_APPS_API_TOKEN (SWA deployment
-#      token) - or migrate to OIDC when SWA supports it for this flow.
-#   2. Uncomment the push trigger so frontend changes deploy independently
-#      of the API. This workflow lives on the frontend branch (the Angular
-#      app is never merged into main).
+# Live: frontend changes deploy automatically and independently of the API
+# (decision D15). This workflow lives on the frontend branch, because the
+# Angular app is never merged into main.
+#
+# The free Static Web Apps SKU has no linked-backend proxy, so the build writes
+# config.json from the API_BASE_URL variable and the browser calls the API's
+# origin directly, allowed by CORS - see docs/AZURE-DEPLOYMENT.md.
 on:
+  push:
+    branches: [frontend]
+    paths:
+      - "lottery-web/**"
+      - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
-  # push:
-  #   branches: [frontend]
-  #   paths:
-  #     - "lottery-web/**"
-  #     - ".github/workflows/deploy-web.yml"
 
 permissions:
   contents: read
