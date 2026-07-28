@@ -1,10 +1,14 @@
 name: CI
 
+# This branch's copy governs frontend. main carries its own copy targeting that
+# branch - the two are never merged, so each is maintained independently.
+# The backend suite runs here too: this branch contains the API source, and
+# branch protection needs a check that runs on every PR.
 on:
   push:
-    branches: [main, frontend]
+    branches: [frontend]
   pull_request:
-    branches: [main]
+    branches: [frontend]
 
 permissions:
   contents: read

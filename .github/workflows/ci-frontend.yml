@@ -1,13 +1,17 @@
 name: CI frontend
 
 # The Angular app lives ONLY on the frontend branch (never merged into main),
-# so this workflow triggers there alone.
+# so this workflow triggers there alone. Pushes are path-filtered to save
+# runner time; pull requests are NOT - a required status check that is skipped
+# leaves the PR blocked on a check that will never report.
 on:
   push:
     branches: [frontend]
     paths:
       - "lottery-web/**"
       - ".github/workflows/ci-frontend.yml"
+  pull_request:
+    branches: [frontend]
 
 permissions:
   contents: read

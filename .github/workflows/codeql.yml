@@ -1,10 +1,14 @@
 name: CodeQL
 
+# This branch carries the Angular app, so it analyzes JavaScript/TypeScript.
+# The C# API is analyzed by main's own CodeQL workflow - the branches are never
+# merged, so each maintains the analysis its code needs. Without this file the
+# frontend would have no static analysis at all (audit finding F1).
 on:
   push:
-    branches: [main]
+    branches: [frontend]
   pull_request:
-    branches: [main]
+    branches: [frontend]
   schedule:
     - cron: "30 5 * * 1" # weekly, so alerts surface even when the repo is quiet
 
@@ -13,23 +17,23 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       security-events: write
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [csharp]
     steps:
       - uses: actions/checkout@v4
 
+      # build-mode none is correct for JS/TS: CodeQL analyzes the sources
+      # directly, no compilation step is involved.
       - uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
+          languages: javascript-typescript
           build-mode: none
+          queries: security-extended
 
       - uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:javascript-typescript"
