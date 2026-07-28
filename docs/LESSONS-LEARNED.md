@@ -218,3 +218,44 @@ here-string at the quotes.
 immune to every quoting rule.
 **Lesson:** for multi-line native-command input containing quotes in PS 5.1,
 pass a file, not an argument.
+
+## 15. The desktop grid was one pixel-rule away from overflowing every phone
+
+**Symptom:** none reported - found while adding the mobile layout. The app had
+**zero** `@media` queries; on a 320px-wide phone the page scrolled sideways and
+the ticket-entry row ran off the screen.
+
+**Cause:** two fixed sizes that only ever met a wide window.
+`grid-template-columns: repeat(auto-fit, minmax(320px, 1fr))` sets a *minimum*
+of 320px, so on a 320px viewport (minus 32px of body padding) the grid item was
+wider than its container and pushed the document out. Separately, the ticket
+row's six `width: 3.1rem` inputs plus gaps needed ~300px before the checkbox
+and label were counted.
+
+`auto-fit` is widely treated as "responsive by default". It is not: it collapses
+*empty* tracks, but a non-empty track never shrinks below the `minmax` minimum.
+Every layout with a hard minimum has a viewport at which it overflows.
+
+**Fix:** `minmax(0, 1fr)` below the breakpoint, and inputs switched to
+`flex: 1 1 0; min-width: 0` so six share whatever width exists. Verified by
+asserting `document.documentElement.scrollWidth === window.innerWidth` at both
+375px and 320px, on every tab, with 10 tickets and 100 match rows rendered.
+
+**Lesson:** a fixed minimum is a promise about the viewport. Grep for `minmax(`,
+`min-width`, and fixed `width` on anything that must fit a phone, and test the
+overflow assertion rather than eyeballing a screenshot - horizontal overflow of
+a few pixels is invisible in a screenshot and obvious to a thumb.
+
+### Postscript: the emulated viewport lies about resize events
+
+Verifying the desktop-to-phone transition through Chrome DevTools Protocol
+looked like a bug in the app: `matchMedia('(max-width: 640px)').matches` flipped
+correctly, the CSS media query applied, but the Angular layout stayed on the old
+one. A probe settled it - CDP's device-metrics override changes the viewport
+**without dispatching `resize` or `MediaQueryList` `change`**, so no listener
+fires. Real browsers and real phone rotations do fire both.
+
+**Lesson:** when emulated-viewport behaviour disagrees with the code, prove
+which one is wrong before "fixing" anything - arm a counter on the event you
+depend on. The transition is covered by a spec driving `FakeViewport` instead,
+which is where that assertion belonged anyway.

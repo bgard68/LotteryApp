@@ -40,6 +40,11 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
     @media (prefers-reduced-motion: reduce) {
       .hit { animation: none; }
     }
+    /* Six balls at the desktop size overflow a 320px phone. */
+    @media (max-width: 640px) {
+      :host { gap: 0.3rem; }
+      .ball { width: 1.95rem; height: 1.95rem; font-size: 0.85rem; }
+    }
   `,
 })
 export class NumberBalls {

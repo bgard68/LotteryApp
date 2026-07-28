@@ -1,170 +1,182 @@
 <section class="card">
-  <h2>Check your numbers</h2>
-  <p class="muted">Generate up to {{ maxTickets }} tickets, or enter your own, then check them against every past drawing.</p>
+  @if (showEntry()) {
+    <h2>Check your numbers</h2>
+    <p class="muted">Generate up to {{ maxTickets }} tickets, or enter your own, then check them against every past drawing.</p>
 
-  <div class="controls">
-    <fieldset class="panel">
-      <legend>Generate</legend>
-      <select [value]="store.game()" (change)="store.setGame($any($event.target).value)" aria-label="Game">
-        @for (g of games; track g.game) {
-          <option [value]="g.game">{{ g.name }}</option>
+    <div class="controls">
+      <fieldset class="panel">
+        <legend>Generate</legend>
+        <select [value]="store.game()" (change)="store.setGame($any($event.target).value)" aria-label="Game">
+          @for (g of games; track g.game) {
+            <option [value]="g.game">{{ g.name }}</option>
+          }
+        </select>
+
+        <label class="count">
+          Tickets
+          <input
+            type="number"
+            inputmode="numeric"
+            [min]="minTickets"
+            [max]="maxTickets"
+            [value]="store.count()"
+            (change)="onCount($any($event.target).value)"
+            aria-label="Number of tickets" />
+        </label>
+
+        <button (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
+      </fieldset>
+
+      <fieldset class="panel">
+        <legend>Check</legend>
+        @if (store.count() > 1) {
+          <span class="which">Checkmark the tickets to include</span>
         }
-      </select>
+        <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
+      </fieldset>
+    </div>
 
-      <label class="count">
-        Tickets
-        <input
-          type="number"
-          [min]="minTickets"
-          [max]="maxTickets"
-          [value]="store.count()"
-          (change)="onCount($any($event.target).value)"
-          aria-label="Number of tickets" />
-      </label>
+    @if (store.era(); as era) {
+      <p class="hint">
+        Each ticket: 5 numbers from 1–{{ era.whiteBallMax }} and one special from 1–{{ era.specialBallMax }}.
+      </p>
+    }
 
-      <button (click)="store.generate()" [disabled]="store.busy()">Generate picks</button>
-    </fieldset>
-
-    <fieldset class="panel">
-      <legend>Check</legend>
-      @if (store.count() > 1) {
-        <span class="which">Checkmark the tickets to include</span>
+    <div class="tickets">
+      @for (ticket of store.tickets(); track $index; let t = $index) {
+        <div class="ticket-row" [class.big-win]="isBigWinTicket(t)">
+          @if (store.count() > 1) {
+            <input
+              class="pick"
+              type="checkbox"
+              [checked]="ticket.selected"
+              (change)="store.toggleSelected(t)"
+              [attr.aria-label]="'Include ticket ' + (t + 1) + ' in check history'" />
+            <span class="ticket-label">#{{ t + 1 }}</span>
+          }
+          <div class="inputs">
+            @for (w of ticket.whites; track $index) {
+              <input
+                type="number"
+                inputmode="numeric"
+                [value]="w ?? ''"
+                (input)="onNumber(t, $index, $any($event.target).value)"
+                [attr.aria-label]="'Ticket ' + (t + 1) + ' white ball ' + ($index + 1)"
+                min="1"
+                [max]="store.era()?.whiteBallMax ?? 99" />
+            }
+            <input
+              class="special"
+              [class.pb]="store.game() === 'powerball'"
+              [class.mm]="store.game() === 'megamillions'"
+              type="number"
+              inputmode="numeric"
+              [value]="ticket.special ?? ''"
+              (input)="onNumber(t, 'special', $any($event.target).value)"
+              [attr.aria-label]="'Ticket ' + (t + 1) + ' special ball'"
+              min="1"
+              [max]="store.era()?.specialBallMax ?? 99" />
+          </div>
+        </div>
       }
-      <button (click)="store.check()" [disabled]="!store.canCheck()">Check history</button>
-    </fieldset>
-  </div>
+    </div>
 
-  @if (store.era(); as era) {
-    <p class="hint">
-      Each ticket: 5 numbers from 1–{{ era.whiteBallMax }} and one special from 1–{{ era.specialBallMax }}.
+    @if (store.validationError(); as validation) {
+      <p class="error">{{ validation }}</p>
+    }
+    @if (store.error(); as error) {
+      <p class="error">{{ error }}</p>
+    }
+  }
+
+  @if (showEmptyResults()) {
+    <h2>Results</h2>
+    <p class="muted">
+      No results yet. Head to the Check tab, generate or type a ticket, then press Check history.
     </p>
   }
 
-  <div class="tickets">
-    @for (ticket of store.tickets(); track $index; let t = $index) {
-      <div class="ticket-row" [class.big-win]="isBigWinTicket(t)">
-        @if (store.count() > 1) {
-          <input
-            class="pick"
-            type="checkbox"
-            [checked]="ticket.selected"
-            (change)="store.toggleSelected(t)"
-            [attr.aria-label]="'Include ticket ' + (t + 1) + ' in check history'" />
-          <span class="ticket-label">#{{ t + 1 }}</span>
-        }
-        <div class="inputs">
-          @for (w of ticket.whites; track $index) {
-            <input
-              type="number"
-              inputmode="numeric"
-              [value]="w ?? ''"
-              (input)="onNumber(t, $index, $any($event.target).value)"
-              [attr.aria-label]="'Ticket ' + (t + 1) + ' white ball ' + ($index + 1)"
-              min="1"
-              [max]="store.era()?.whiteBallMax ?? 99" />
-          }
-          <input
-            class="special"
-            [class.pb]="store.game() === 'powerball'"
-            [class.mm]="store.game() === 'megamillions'"
-            type="number"
-            inputmode="numeric"
-            [value]="ticket.special ?? ''"
-            (input)="onNumber(t, 'special', $any($event.target).value)"
-            [attr.aria-label]="'Ticket ' + (t + 1) + ' special ball'"
-            min="1"
-            [max]="store.era()?.specialBallMax ?? 99" />
-        </div>
-      </div>
-    }
-  </div>
-
-  @if (store.validationError(); as validation) {
-    <p class="error">{{ validation }}</p>
-  }
-  @if (store.error(); as error) {
-    <p class="error">{{ error }}</p>
-  }
-
-  @if (store.results(); as results) {
-    <div class="results">
-      @if (bigWins().length > 0) {
-        <div class="big-wins" role="status">
-          <p class="big-title">
-            Big win{{ bigWins().length > 1 ? 's' : '' }} - 3 or more matching numbers plus the {{ specialName() }}
-          </p>
-          @for (w of bigWins(); track $index) {
-            <div class="big-row">
-              <span class="big-when">
-                @if (store.count() > 1) { Ticket {{ w.ticket + 1 }} · }
-                {{ w.match.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}
-              </span>
-              <app-number-balls
-                [whites]="w.match.drawnWhiteBalls"
-                [special]="w.match.drawnSpecial"
-                [accent]="accent()"
-                [matchedWhites]="matchedWhites(w.draft, w.match)"
-                [specialMatched]="w.match.specialMatched" />
-              <span class="big-tier">
-                {{ w.match.tier }}
-                <span class="big-payout">
-                  @if (w.match.isJackpot) { JACKPOT } @else { {{ formatJackpot(w.match.approximateAmount) }} }
-                </span>
-              </span>
-            </div>
-          }
-        </div>
-      }
-      <label class="page-size">
-        Show
-        <select [value]="store.pageSize()" (change)="onPageSize($any($event.target).value)" aria-label="Matches shown per ticket">
-          <option value="10">10</option>
-          <option value="25">25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-          <option value="all">All</option>
-        </select>
-        matches per ticket
-      </label>
-      @for (ticket of store.tickets(); track $index; let t = $index) {
-        @if (displayedResult(t); as result) {
-          <div class="ticket-results">
-            <p class="muted">
-              @if (store.count() > 1) { Ticket {{ t + 1 }} · }
-              {{ winningMatches(t).length }} winning match(es) across
-              {{ result.drawsChecked.toLocaleString() }} drawings
-              @if (result.historySince) { since {{ result.historySince + 'T12:00:00' | date: 'yyyy' }} }
+  @if (showResults()) {
+    @if (store.results(); as results) {
+      <div class="results">
+        @if (bigWins().length > 0) {
+          <div class="big-wins" role="status">
+            <p class="big-title">
+              Big win{{ bigWins().length > 1 ? 's' : '' }} - 3 or more matching numbers plus the {{ specialName() }}
             </p>
-            @for (m of visibleMatches(t); track m.drawDate) {
-              <div class="match">
-                <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
+            @for (w of bigWins(); track $index) {
+              <div class="big-row">
+                <span class="big-when">
+                  @if (store.count() > 1) { Ticket {{ w.ticket + 1 }} · }
+                  {{ w.match.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}
+                </span>
                 <app-number-balls
-                  [whites]="m.drawnWhiteBalls"
-                  [special]="m.drawnSpecial"
+                  [whites]="w.match.drawnWhiteBalls"
+                  [special]="w.match.drawnSpecial"
                   [accent]="accent()"
-                  [matchedWhites]="matchedWhites(ticket, m)"
-                  [specialMatched]="m.specialMatched" />
-                <span class="tier">
-                  {{ m.tier }} ·
-                  @if (m.isJackpot) { Jackpot } @else { {{ formatJackpot(m.approximateAmount) }} }
+                  [matchedWhites]="matchedWhites(w.draft, w.match)"
+                  [specialMatched]="w.match.specialMatched" />
+                <span class="big-tier">
+                  {{ w.match.tier }}
+                  <span class="big-payout">
+                    @if (w.match.isJackpot) { JACKPOT } @else { {{ formatJackpot(w.match.approximateAmount) }} }
+                  </span>
                 </span>
               </div>
-            } @empty {
-              <p class="muted small">No winning matches - in good company: most tickets never win.</p>
-            }
-            @if (winningMatches(t).length > visibleMatches(t).length) {
-              <p class="muted small">
-                Showing first {{ visibleMatches(t).length }} of {{ winningMatches(t).length }} - use the selector above to see more.
-              </p>
             }
           </div>
         }
-      }
-      <p class="hint">
-        Each row shows that drawing's winning numbers; the flashing ones are on your ticket.
-        Prize amounts are today's approximate tier values - historical winnings expire and
-        cannot be claimed.
-      </p>
-    </div>
+        <label class="page-size">
+          Show
+          <select [value]="store.pageSize()" (change)="onPageSize($any($event.target).value)" aria-label="Matches shown per ticket">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="all">All</option>
+          </select>
+          matches per ticket
+        </label>
+        @for (ticket of store.tickets(); track $index; let t = $index) {
+          @if (displayedResult(t); as result) {
+            <div class="ticket-results">
+              <p class="muted">
+                @if (store.count() > 1) { Ticket {{ t + 1 }} · }
+                {{ winningMatches(t).length }} winning match(es) across
+                {{ result.drawsChecked.toLocaleString() }} drawings
+                @if (result.historySince) { since {{ result.historySince + 'T12:00:00' | date: 'yyyy' }} }
+              </p>
+              @for (m of visibleMatches(t); track m.drawDate) {
+                <div class="match">
+                  <span class="when">{{ m.drawDate + 'T12:00:00' | date: 'EEE, MMM d, y' }}</span>
+                  <app-number-balls
+                    [whites]="m.drawnWhiteBalls"
+                    [special]="m.drawnSpecial"
+                    [accent]="accent()"
+                    [matchedWhites]="matchedWhites(ticket, m)"
+                    [specialMatched]="m.specialMatched" />
+                  <span class="tier">
+                    {{ m.tier }} ·
+                    @if (m.isJackpot) { Jackpot } @else { {{ formatJackpot(m.approximateAmount) }} }
+                  </span>
+                </div>
+              } @empty {
+                <p class="muted small">No winning matches - in good company: most tickets never win.</p>
+              }
+              @if (winningMatches(t).length > visibleMatches(t).length) {
+                <p class="muted small">
+                  Showing first {{ visibleMatches(t).length }} of {{ winningMatches(t).length }} - use the selector above to see more.
+                </p>
+              }
+            </div>
+          }
+        }
+        <p class="hint">
+          Each row shows that drawing's winning numbers; the flashing ones are on your ticket.
+          Prize amounts are today's approximate tier values - historical winnings expire and
+          cannot be claimed.
+        </p>
+      </div>
+    }
   }
 </section>

@@ -16,8 +16,9 @@ src/app/
 â”œâ”€â”€ core/
 â”‚   â”œâ”€â”€ domain/     # pure TS, framework-free: game metadata, countdown math,
 â”‚   â”‚               #   jackpot formatting (all unit-tested without Angular)
-â”‚   â”œâ”€â”€ ports/      # abstractions the UI depends on (DIP):
-â”‚   â”‚               #   LotteryApi (abstract class) + CLOCK (injectable "now")
+â”‚   â”œâ”€â”€ ports/      # abstractions the UI depends on (DIP): LotteryApi
+â”‚   â”‚               #   (abstract class), CLOCK (injectable "now"),
+â”‚   â”‚               #   Viewport (injectable "is this a phone")
 â”‚   â”œâ”€â”€ data/       # HttpLotteryApi - the HTTP adapter, bound in app.config.ts
 â”‚   â”œâ”€â”€ api/        # schema.d.ts - types GENERATED from the backend's OpenAPI
 â”‚   â””â”€â”€ state/      # signal stores: DashboardStore (cards + ticking countdown),
@@ -55,6 +56,38 @@ src/app/
 - **History rows show the drawing's numbers** (not the ticket repeated), with
   the balls that appear on your ticket flashing; a "Show 10/25/50/100/All
   matches per ticket" selector slices the fully-loaded results client-side.
+
+## Responsive layout ([D22](../docs/REQUIREMENTS-AND-DECISIONS.md))
+
+**At 641px and up nothing changed** - the same 880px single-scroll page, the
+same element sizes. Below 640px the shell becomes a three-tab app:
+
+| Tab | Shows |
+|---|---|
+| Games | Both game cards, one per row |
+| Check | Generate controls and the ticket rows |
+| Wins | The big-wins panel and per-ticket match history |
+
+- **`Viewport` is a port**, not a `matchMedia` call inside a component: an
+  injectable exposing an `isMobile` signal, with `BrowserViewport` as the
+  media-query adapter and `FakeViewport` for specs. Same DIP as `CLOCK` -
+  tests pin a layout instead of resizing a real browser.
+- **Checking hands off to the Wins tab** and badges the big-win count -
+  otherwise the answer renders on a screen the user is not looking at. The
+  threshold moved into `CheckerStore.bigWins`, so the panel and the badge
+  cannot disagree.
+- **`TicketChecker` takes a `section` input** (`all` | `entry` | `results`)
+  defaulting to `all`, so the desktop path renders exactly as before while the
+  phone layout splits one component across two tabs.
+- **Entry sizing is the real constraint**: six fixed-width number inputs
+  overflow a 320px screen, so on mobile they flex to share the row and the
+  balls shrink from 2.2rem to 1.95rem. Input font-size stays at 1rem - any
+  smaller and iOS Safari zooms the page on focus.
+- **Match rows stack** (date, then balls, then payout) instead of competing
+  for one line.
+- The tab bar is `position: fixed` with `env(safe-area-inset-bottom)` padding
+  and 44px touch targets; `main` reserves matching bottom padding so the
+  footer is never trapped underneath it.
 
 ## API origin
 
@@ -108,14 +141,16 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-25 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+30 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 count clamping, per-ticket validation naming the offending ticket,
 checkbox-selection semantics - all-complete-tickets checked, view-filter
 toggling keeps results, no-selection disables checking - page-size behaviour,
-and rate-limited/unreachable/generic error messaging), and an App shell
-render smoke test. No HTTP mocking anywhere - the port abstraction makes
-fakes trivial.
+and rate-limited/unreachable/generic error messaging), and App shell specs
+covering **both layouts** against a `FakeViewport`: desktop renders everything
+with no tab bar; phone starts on Games, swaps to the checker on Check, jumps
+to Wins when results arrive, and returns to the single page when the viewport
+widens. No HTTP mocking anywhere - the port abstraction makes fakes trivial.
 
 ## Workflows on this branch
 
