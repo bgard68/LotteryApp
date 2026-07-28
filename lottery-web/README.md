@@ -57,7 +57,7 @@ src/app/
   the balls that appear on your ticket flashing; a "Show 10/25/50/100/All
   matches per ticket" selector slices the fully-loaded results client-side.
 
-## Responsive layout ([D22](../docs/REQUIREMENTS-AND-DECISIONS.md))
+## Responsive layout ([D23](../docs/REQUIREMENTS-AND-DECISIONS.md))
 
 **At 641px and up nothing changed** - the same 880px single-scroll page, the
 same element sizes. Below 640px the shell becomes a three-tab app:
