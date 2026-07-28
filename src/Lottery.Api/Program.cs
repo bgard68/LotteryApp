@@ -1,4 +1,5 @@
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Lottery.Api;
 using Lottery.Application.Abstractions;
 using Lottery.Application.UseCases;
@@ -17,6 +18,23 @@ builder.Services.AddHostedService<DrawRefreshService>();
 // data is not healthy, and /healthz is what the keep-alive workflow, the
 // deploy gate and Azure all watch.
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
+
+// Behind App Service the connection's remote address is the platform front
+// end, not the visitor - so without this every caller lands in the SAME rate
+// limit partition, and one noisy client can 429 the entire site.
+//
+// ForwardLimit = 1 takes the RIGHTMOST X-Forwarded-For entry, which is the one
+// the front end appends. A client that sends its own X-Forwarded-For only adds
+// entries to the left of it, so the header cannot be forged to dodge the
+// limit. KnownNetworks/KnownProxies are cleared because the front end's
+// address is neither stable nor knowable.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Public anonymous API: per-client ceiling so a scraper cannot run up compute.
 // 120/min default - a multi-ticket check is up to 10 calls, so an active human
@@ -78,6 +96,10 @@ catch (Exception ex)
         // into "it cannot open THIS path", which is the whole diagnosis.
         builder.Configuration.GetConnectionString("Default"));
 }
+
+// First in the pipeline, and before the rate limiter in particular: it is what
+// turns Connection.RemoteIpAddress into the real caller.
+app.UseForwardedHeaders();
 
 app.UseCors(WebOrigins);
 app.UseRateLimiter();
