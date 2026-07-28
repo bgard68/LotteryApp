@@ -4,6 +4,7 @@ using Lottery.Application.Abstractions;
 using Lottery.Application.UseCases;
 using Lottery.Domain;
 using Lottery.Infrastructure;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,19 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions { PermitLimit = permitPerMinute, Window = TimeSpan.FromMinutes(1) }));
 });
 
+// CORS exists only because the free Static Web Apps SKU has no linked-backend
+// feature (that is a Standard-tier capability), so the browser calls this API's
+// origin directly instead of a same-origin /api/* proxy. Origins come from
+// configuration - set by provisioning, empty locally where the dev proxy makes
+// every request same-origin anyway.
+const string WebOrigins = "web-origins";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options => options.AddPolicy(WebOrigins, policy =>
+{
+    if (allowedOrigins.Length > 0)
+        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod();
+}));
+
 var app = builder.Build();
 
 // Migrations then one-time seed, before serving traffic.
@@ -37,8 +51,17 @@ foreach (var game in Enum.GetValues<Game>())
         app.Logger.LogInformation("Seeded {Count} {Game} draws from snapshot.", summary.DrawCount, game);
 }
 
+app.UseCors(WebOrigins);
 app.UseRateLimiter();
 app.MapOpenApi();
+
+// Interactive API reference at /scalar, development only - the OpenAPI
+// document itself stays available everywhere, but a browsable UI is not
+// something a public production API needs to expose.
+if (app.Environment.IsDevelopment())
+{
+    app.MapScalarApiReference(options => options.WithTitle("LotteryApp API"));
+}
 app.MapHealthChecks("/healthz");
 app.MapLotteryEndpoints();
 
