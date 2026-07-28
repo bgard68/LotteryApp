@@ -330,3 +330,22 @@ errors.** The domain code was correct every time; the mistake was in what got
 displayed (16), what got hidden (13), where a boundary was drawn (17), or how
 generous a limit was (15). That is precisely the class of defect unit tests
 cannot catch.
+
+## 20. Dependabot PRs failed locked-mode restore
+
+**Symptom:** CI failed with `NU1004` on the first Dependabot NuGet PR to run
+under the new workflow: the lock file said 6.1.1, central package management
+said 6.1.6, and `dotnet restore --locked-mode` refused the mismatch.
+
+**Cause:** this repo commits `packages.lock.json` and restores locked (a
+deliberate reproducibility gate). Dependabot updates
+`Directory.Packages.props` but does not regenerate the lock files - so every
+NuGet update PR arrives self-inconsistent. The two features are individually
+correct and jointly broken.
+
+**Fix:** regenerate on the PR branch (`dotnet restore --force-evaluate`),
+verify build + tests, and push the lock files to the same PR. Recorded in the
+dependency-update policy so future updates do this as a matter of course.
+**Lesson:** every gate you add changes what "a passing dependency update"
+requires - when you turn on locked-mode restore, automated update PRs inherit
+a new manual step until tooling catches up.
