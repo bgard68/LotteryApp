@@ -90,6 +90,23 @@ variable these workflows read (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`, `API_APP_NAME`, `API_BASE_URL`) and the one secret
 (`AZURE_STATIC_WEB_APPS_API_TOKEN`). Re-running it is safe.
 
+## Cleanup (`cleanup-runs.yml`)
+
+Weekly (Sundays 04:00 UTC) + manual. Prunes Actions history **by count rather
+than age** - GitHub's built-in retention is time-based (90 days maximum), which
+says nothing useful when a busy week produces fifty runs and a quiet one
+produces two.
+
+Defaults: **5 runs per workflow**, **2 per deployment workflow** - a deploy's
+history is only interesting for "what is live" and "what did the previous one
+do". Both are overridable when running it manually.
+
+Safety: only `completed` runs are eligible, so nothing in flight is touched -
+including the cleanup run itself. It lives on `main` only, since runs are
+repo-wide (one copy prunes the frontend branch's workflows too) and scheduled
+triggers fire only from the default branch. Each run writes a summary table of
+what remains.
+
 ## Conventions
 
 - Workflows get **least-privilege permissions** blocks (`contents: read` by
