@@ -138,6 +138,54 @@ only maintainer out of an emergency fix is a worse failure mode than the
 bypass it prevents. Protection here is a guard against accident, not against a
 malicious owner.
 
+### F7 - HTTPS was not enforced on the App Service
+
+`httpsOnly` was `false`, and `http://app-lottery-.../healthz` returned **200
+over plaintext** rather than redirecting. Nothing secret travels this API - it
+serves public lottery results with no authentication - so the exposure was
+limited, but an unencrypted endpoint is also the first thing a reviewer checks.
+
+**Fix:** `az webapp update --https-only true`. Plain HTTP now answers **301** to
+the HTTPS URL. No code change was needed; the platform does the redirect before
+the app sees the request.
+
+### F8 - The refresh endpoint was unauthenticated in production
+
+`POST /internal/refresh` supports a shared-key guard (`X-Refresh-Key` matched
+against `Refresh:Key`), and the keep-alive workflow sends the header when the
+secret exists. But `Refresh:Key` was set **nowhere** - not in `appsettings`,
+not as an App Service setting - so `requiredKey` was empty and the guard was
+skipped entirely. Anyone could trigger feed fetches and database writes.
+
+**Fix:** a 64-character random key generated, stored as the App Service setting
+`Refresh__Key` and as the `REFRESH_KEY` GitHub Actions secret in the same
+operation so the two cannot drift. The value was never printed or written to
+disk. Verified: an unauthenticated POST now returns **401**, and a manually
+dispatched keep-alive run succeeds, proving the secret matches end to end.
+
+### F9 - The rate limiter was partitioning on the wrong IP address
+
+The limiter keyed on `context.Connection.RemoteIpAddress` with no
+forwarded-headers handling. Behind App Service that address is the platform
+front end, not the visitor - so every caller in the world shared **one**
+partition. The practical effect is the opposite of the intent: no per-client
+limiting at all, and one busy client able to 429 the entire site. It also made
+F8 worse, because the rate limit was the only thing standing in front of the
+unauthenticated refresh endpoint.
+
+**Fix:** `UseForwardedHeaders` first in the pipeline, with `ForwardLimit = 1`.
+That reads the **rightmost** `X-Forwarded-For` entry - the one the front end
+appends - so a client sending its own header only adds entries to the left and
+cannot forge an identity to dodge the limit. `KnownNetworks`/`KnownProxies` are
+cleared because the front end's address is neither stable nor knowable.
+
+### Not fixed: secret-scanning non-provider patterns and validity checks
+
+Both were requested via the API and both silently stayed `disabled` - they are
+GitHub Secret Protection features, not part of what a public repository gets
+for free. Basic secret scanning and push protection are enabled and are the
+controls that matter here. Recorded so the gap is not rediscovered as a bug.
+
 ## Dependency update policy
 
 Dependabot opens PRs; merging them is a judgment call, not a formality:
