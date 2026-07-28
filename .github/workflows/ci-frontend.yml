@@ -42,6 +42,12 @@ jobs:
       - name: Production build
         run: npx ng build
 
+      # Against the BUILT output, not the source tree: the config only reaches
+      # Azure if the asset pipeline copies it, and a site with no CSP works
+      # perfectly - nothing else in the suite would notice it had gone.
+      - name: Security headers ship with the build
+        run: npm run check:swa
+
   client-drift:
     name: OpenAPI client drift check
     runs-on: ubuntu-latest

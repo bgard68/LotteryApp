@@ -18,6 +18,14 @@ on:
 permissions:
   contents: read
 
+# Two merges in quick succession would otherwise race, and the older build can
+# win. Serialise rather than cancel: a half-uploaded site is worse than a queued
+# deploy.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
