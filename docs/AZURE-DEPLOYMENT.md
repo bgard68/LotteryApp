@@ -78,24 +78,58 @@ real production home:
 ./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString) -WithKeyVault
 ```
 
+> **These are alternatives, not a fallback chain.** You choose one at
+> provisioning time; there is no automatic failover between them. (The word
+> "fallback" appears elsewhere in these docs for the *jackpot feeds*, where a
+> second source really is tried when the first fails - that mechanism has
+> nothing to do with secret storage.) Pass no token at all and neither setting
+> is created: the app calls Socrata anonymously, which is fine at a few
+> requests per week.
+
 **Default (application setting).** The value lives in the App Service's own
-configuration store - encrypted at rest, outside source control, readable only
-with RBAC access to the app. Azure injects it as the environment variable
-`Feeds__SocrataAppToken`, which .NET reads as the config key
-`Feeds:SocrataAppToken` (a double underscore stands in for the colon, since
-environment variables cannot contain one). No extra resources, no cost.
+configuration store - encrypted at rest, outside source control. Azure injects
+it as the environment variable `Feeds__SocrataAppToken`, which .NET reads as
+the config key `Feeds:SocrataAppToken` (a double underscore stands in for the
+colon, since environment variables cannot contain one). No extra resources, no
+cost.
+
+Where to see it after deployment:
+
+- **Portal:** your App Service -> Settings -> **Environment variables** -> App
+  settings -> `Feeds__SocrataAppToken`
+- **CLI:** `az webapp config appsettings list --name <api-app-name> --resource-group rg-lottery`
 
 **`-WithKeyVault`.** Provisions a Key Vault with RBAC authorization, grants the
 app's managed identity the *Key Vault Secrets User* role (read-only), stores
 the secret, and sets the app setting to `@Microsoft.KeyVault(SecretUri=...)`.
-App Service resolves that reference at startup using the managed identity, so
-the token never appears in configuration and gains rotation and audit logging.
+App Service resolves that reference at startup using the managed identity.
 
-Which to choose: this architecture does not *need* Key Vault - Managed Identity
-and OIDC already eliminate every other secret, so a vault here holds exactly
-one optional rate-limit token. The switch exists because it is the textbook
-pattern and worth demonstrating; the cost is fractions of a cent per month at
-this volume. The application code is identical either way, which is the point:
+Where things live in this mode:
+
+- **The value:** Key Vault -> Secrets -> `Feeds--SocrataAppToken` (hyphens
+  because vault secret names allow only letters, digits and hyphens)
+- **The app setting:** still `Feeds__SocrataAppToken`, but its value is the
+  `@Microsoft.KeyVault(...)` reference rather than the token
+
+### The difference that actually matters
+
+Both options encrypt at rest, so that is not the deciding factor. The real
+distinction is **who can read the value**:
+
+| | Plain app setting | Key Vault reference |
+|---|---|---|
+| Someone with read access to the App Service (e.g. Contributor) | **Sees the token** in the Portal or via CLI | Sees only the reference URI |
+| Reading the actual value | - | Requires *separate* RBAC on the vault |
+| Access record | None | Every read is audit-logged |
+| Rotation | Edit the setting, restart | Add a new secret version |
+
+That separation of duties - not encryption - is what Key Vault buys.
+
+Which to choose: this architecture does not *need* it. Managed Identity and
+OIDC already eliminate every other secret, so a vault here holds exactly one
+optional rate-limit token. The switch exists because it is the textbook pattern
+and worth demonstrating; the cost is fractions of a cent per month at this
+volume. The application code is identical either way, which is the point:
 storage is a deployment decision, not a code decision.
 
 Handling: the script takes the token as a **SecureString**, converts it at the

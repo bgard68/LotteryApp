@@ -86,8 +86,14 @@ and **none of them is a file in this repository**:
 | Environment | Physical location | How it gets there |
 |---|---|---|
 | Local development | `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json` - your machine, outside the repo | `dotnet user-secrets set "Feeds:SocrataAppToken" "<paste-token>" --project src/Lottery.Api` |
-| Azure (default) | App Service **application setting**, encrypted at rest and readable only with RBAC access to the app | `./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString)` |
-| Azure (`-WithKeyVault`) | **Key Vault** secret; the app setting holds only a reference | `./scripts/provision-azure.ps1 -SocrataToken $t -WithKeyVault` |
+| Azure (default) | App Service **application setting** `Feeds__SocrataAppToken` - Portal: App Service -> Settings -> Environment variables | `./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString)` |
+| Azure (`-WithKeyVault`) | **Key Vault** secret `Feeds--SocrataAppToken`; the app setting holds only an `@Microsoft.KeyVault(...)` reference | `./scripts/provision-azure.ps1 -SocrataToken $t -WithKeyVault` |
+
+The two Azure rows are **alternatives chosen at provisioning time, not a
+fallback chain** - there is no failover between them. Supply no token and
+neither is created; the feed simply runs anonymously. Which one to pick, and
+the separation-of-duties difference that decides it, is in
+[Azure deployment](AZURE-DEPLOYMENT.md#the-difference-that-actually-matters).
 
 Two mechanics worth knowing:
 
