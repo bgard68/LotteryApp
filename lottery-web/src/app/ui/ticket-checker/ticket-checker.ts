@@ -1,10 +1,16 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { DatePipe } from '@angular/common';
-import { CheckerStore, MAX_TICKETS, MIN_TICKETS, TicketDraft } from '../../core/state/checker-store';
+import { BigWin, CheckerStore, MAX_TICKETS, MIN_TICKETS, TicketDraft } from '../../core/state/checker-store';
 import { GAMES } from '../../core/domain/game';
 import { formatJackpot } from '../../core/domain/money';
 import { TicketMatchDto } from '../../core/ports/lottery-api';
 import { NumberBalls } from '../number-balls/number-balls';
+
+/**
+ * Which half of the panel to render. Desktop uses `all` (one scrolling page);
+ * the phone layout splits entry and results across two tabs.
+ */
+export type CheckerSection = 'all' | 'entry' | 'results';
 
 /**
  * Ticket checker panel. This component talks to CheckerStore directly (it is
@@ -18,11 +24,20 @@ import { NumberBalls } from '../number-balls/number-balls';
   styleUrl: './ticket-checker.scss',
 })
 export class TicketChecker {
+  /** Defaults to the full panel, so desktop renders exactly as it always has. */
+  readonly section = input<CheckerSection>('all');
+
   protected readonly store = inject(CheckerStore);
   protected readonly games = GAMES;
   protected readonly formatJackpot = formatJackpot;
   protected readonly minTickets = MIN_TICKETS;
   protected readonly maxTickets = MAX_TICKETS;
+
+  protected readonly showEntry = computed(() => this.section() !== 'results');
+  protected readonly showResults = computed(() => this.section() !== 'entry');
+  /** Only the dedicated results tab needs an empty state; desktop just hides. */
+  protected readonly showEmptyResults = computed(() =>
+    this.section() === 'results' && this.store.results() === null);
 
   protected onNumber(ticket: number, index: number | 'special', raw: string): void {
     const value = raw === '' ? null : Number(raw);
@@ -74,21 +89,8 @@ export class TicketChecker {
     return this.store.game() === 'powerball' ? 'Powerball' : 'Mega Ball';
   }
 
-  /**
-   * Matches worth shouting about: 3 or more matching WHITE balls plus the
-   * special ball (Match 3 + PB, $100 tier, and up). Hidden when none.
-   */
-  protected bigWins(): { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] {
-    const results = this.store.results();
-    if (!results) return [];
-    const tickets = this.store.tickets();
-    const wins: { ticket: number; draft: TicketDraft; match: TicketMatchDto }[] = [];
-    results.forEach((result, ticket) => {
-      result?.matches.forEach((match) => {
-        if (match.whiteMatches >= 3 && match.specialMatched)
-          wins.push({ ticket, draft: tickets[ticket], match });
-      });
-    });
-    return wins;
+  /** The threshold lives in the store - the tab badge reads the same list. */
+  protected bigWins(): BigWin[] {
+    return this.store.bigWins();
   }
 }

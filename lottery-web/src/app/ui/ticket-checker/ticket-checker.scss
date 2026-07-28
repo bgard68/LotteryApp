@@ -189,3 +189,74 @@ button {
   .when { min-width: 9.5rem; }
   .tier { font-weight: 600; }
 }
+
+@media (max-width: 640px) {
+  .card { padding: 0.9rem; }
+
+  // The two fieldsets sat side by side; at phone width they stack full-bleed.
+  .controls { flex-direction: column; gap: 0.6rem; }
+
+  .panel {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.6rem 0.7rem 0.7rem;
+
+    select { flex: 1; min-width: 0; }
+    button { width: 100%; }
+  }
+
+  .count {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  // Six fixed-width inputs overflow a 320px screen; let them share the row.
+  .ticket-row {
+    gap: 0.35rem;
+    padding: 0.15rem 0.2rem;
+  }
+
+  .ticket-label { min-width: 1.2rem; font-size: 0.75rem; }
+
+  .inputs {
+    flex: 1;
+    min-width: 0;
+    gap: 0.25rem;
+
+    // Font size stays at 1rem: anything smaller makes iOS Safari zoom on focus.
+    input {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+      padding: 0.45rem 0.1rem;
+    }
+  }
+
+  // Date, balls and payout stop competing for one line and stack instead.
+  .match,
+  .big-wins .big-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    text-align: center;
+  }
+
+  .match {
+    padding: 0.5rem 0.5rem;
+
+    .when { min-width: 0; }
+    app-number-balls { justify-content: center; }
+  }
+
+  .big-wins {
+    padding: 0.7rem 0.6rem;
+
+    .big-row {
+      .big-when { min-width: 0; }
+      .big-tier { text-align: center; }
+      app-number-balls { justify-content: center; }
+    }
+  }
+
+  .page-size { flex-wrap: wrap; }
+}

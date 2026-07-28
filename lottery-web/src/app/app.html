@@ -1,16 +1,20 @@
-<main>
+<main [class.tabbed]="viewport.isMobile()">
   <header class="masthead">
     <h1>Lucky numbers</h1>
     <p class="muted">Powerball &amp; Mega Millions results, countdowns, and ticket checking</p>
   </header>
 
-  <div class="cards">
-    @for (card of dashboard.cards(); track card.meta.game) {
-      <app-game-card [view]="card" />
-    }
-  </div>
+  @if (showGames()) {
+    <div class="cards">
+      @for (card of dashboard.cards(); track card.meta.game) {
+        <app-game-card [view]="card" />
+      }
+    </div>
+  }
 
-  <app-ticket-checker />
+  @if (showChecker()) {
+    <app-ticket-checker [section]="checkerSection()" />
+  }
 
   <footer>
     <p>
@@ -20,3 +24,20 @@
     </p>
   </footer>
 </main>
+
+@if (viewport.isMobile()) {
+  <nav class="tabbar" aria-label="Sections">
+    <button type="button" (click)="selectTab('games')" [attr.aria-current]="tab() === 'games' ? 'page' : null">
+      Games
+    </button>
+    <button type="button" (click)="selectTab('check')" [attr.aria-current]="tab() === 'check' ? 'page' : null">
+      Check
+    </button>
+    <button type="button" (click)="selectTab('wins')" [attr.aria-current]="tab() === 'wins' ? 'page' : null">
+      Wins
+      @if (winCount() > 0) {
+        <span class="badge" [attr.aria-label]="winCount() + ' big wins'">{{ winCount() }}</span>
+      }
+    </button>
+  </nav>
+}

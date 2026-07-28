@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Game } from '../domain/game';
-import { ApiUnreachableError, CheckResultDto, LotteryApi, RateLimitedError, RuleEraDto } from '../ports/lottery-api';
+import { ApiUnreachableError, CheckResultDto, LotteryApi, RateLimitedError, RuleEraDto, TicketMatchDto } from '../ports/lottery-api';
 
 /** One editable ticket row; null slots are simply not filled in yet. */
 export interface TicketDraft {
@@ -12,6 +12,13 @@ export interface TicketDraft {
 
 export const MIN_TICKETS = 1;
 export const MAX_TICKETS = 10;
+
+/** A match worth shouting about, paired with the ticket that produced it. */
+export interface BigWin {
+  readonly ticket: number;
+  readonly draft: TicketDraft;
+  readonly match: TicketMatchDto;
+}
 
 function emptyTicket(): TicketDraft {
   return { whites: [null, null, null, null, null], special: null, selected: true };
@@ -76,6 +83,28 @@ export class CheckerStore {
     && this.selectedCount() > 0
     && this.allComplete()
     && this.validationError() === null);
+
+  /**
+   * Matches worth shouting about: 3 or more matching WHITE balls plus the
+   * special ball (Match 3 + PB, the $100 tier, and up). Deliberately spans
+   * every ticket, selected or not.
+   *
+   * Lives here rather than in the view because the threshold is a rule, and
+   * two consumers now read it: the big-wins panel and the mobile tab badge.
+   */
+  readonly bigWins = computed<BigWin[]>(() => {
+    const results = this.results();
+    if (!results) return [];
+    const tickets = this.tickets();
+    const wins: BigWin[] = [];
+    results.forEach((result, ticket) => {
+      result?.matches.forEach((match) => {
+        if (match.whiteMatches >= 3 && match.specialMatched)
+          wins.push({ ticket, draft: tickets[ticket], match });
+      });
+    });
+    return wins;
+  });
 
   constructor() {
     void this.loadEra();
