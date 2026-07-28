@@ -8,7 +8,16 @@
     .\smoke-test.ps1 -BaseUrl http://localhost:5000
 #>
 param(
-    [string]$BaseUrl = "http://localhost:5000"
+    [string]$BaseUrl = "http://localhost:5000",
+
+    # Shared key for POST /internal/refresh. Supply it and the test asserts the
+    # refresh succeeds; omit it and the test asserts the endpoint is guarded.
+    # Never defaulted, never echoed - the deploy workflow passes a secret.
+    [string]$RefreshKey = $env:REFRESH_KEY,
+
+    # Seconds to wait for the host to answer /healthz before asserting anything.
+    # A post-deploy run races App Service recycling the app.
+    [int]$ReadyTimeoutSec = 120
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,9 +25,9 @@ $failures = @()
 $passes = 0
 
 function Invoke-Api {
-    param([string]$Path, [string]$Method = "GET")
+    param([string]$Path, [string]$Method = "GET", [hashtable]$Headers = @{})
     try {
-        $response = Invoke-WebRequest -Uri "$BaseUrl$Path" -Method $Method -UseBasicParsing -TimeoutSec 90
+        $response = Invoke-WebRequest -Uri "$BaseUrl$Path" -Method $Method -Headers $Headers -UseBasicParsing -TimeoutSec 90
         return @{ Status = [int]$response.StatusCode; Body = $response.Content }
     }
     catch {
@@ -45,8 +54,9 @@ function Invoke-Api {
 }
 
 function Assert-Api {
-    param([string]$Name, [string]$Path, [int]$ExpectedStatus, [string]$BodyContains = $null, [string]$Method = "GET")
-    $result = Invoke-Api -Path $Path -Method $Method
+    param([string]$Name, [string]$Path, [int]$ExpectedStatus, [string]$BodyContains = $null,
+          [string]$Method = "GET", [hashtable]$Headers = @{})
+    $result = Invoke-Api -Path $Path -Method $Method -Headers $Headers
     $ok = $result.Status -eq $ExpectedStatus
     if ($ok -and $BodyContains) { $ok = $result.Body -match [regex]::Escape($BodyContains) }
     if ($ok) {
@@ -61,6 +71,19 @@ function Assert-Api {
 }
 
 Write-Host "Smoke-testing $BaseUrl"
+
+# A post-deploy run starts while App Service is still recycling the app, which
+# answers 500 until it is up. Without this wait the gate reports a broken deploy
+# for an app that is merely still starting - so poll first, then assert.
+$deadline = (Get-Date).AddSeconds($ReadyTimeoutSec)
+do {
+    $ready = (Invoke-Api -Path "/healthz").Status -eq 200
+    if (-not $ready) { Start-Sleep -Seconds 3 }
+} while (-not $ready -and (Get-Date) -lt $deadline)
+
+if (-not $ready) {
+    Write-Host "Host did not become ready within $ReadyTimeoutSec seconds - asserting anyway." -ForegroundColor Yellow
+}
 
 # --- Health first: fail fast if the stack is down ---
 Assert-Api "healthz" "/healthz" 200 "Healthy"
@@ -90,8 +113,37 @@ Assert-Api "mm special out of era -> 400"   "/api/megamillions/check?whites=1,2,
 Assert-Api "generate count 0 -> 400"        "/api/powerball/generate?count=0" 400 "between 1 and 10"
 Assert-Api "generate count 11 -> 400"       "/api/powerball/generate?count=11" 400 "between 1 and 10"
 
-# --- Refresh trigger (Phase 2) - always 200; feed failures are reported in-body ---
-Assert-Api "internal refresh" "/internal/refresh" 200 "upToDate" -Method POST
+# --- Refresh trigger - guarded by a shared key when Refresh:Key is configured ---
+# With a key: it must be accepted (feed failures are reported in-body, still 200).
+# Without one: the endpoint must REJECT us, which is the assertion that proves
+# the guard is switched on in this environment. A local run with no key
+# configured server-side is the third case, and 200 is correct there.
+if ($RefreshKey) {
+    Assert-Api "internal refresh (keyed)" "/internal/refresh" 200 "upToDate" `
+        -Method POST -Headers @{ "X-Refresh-Key" = $RefreshKey }
+
+    $unauthorized = Invoke-Api -Path "/internal/refresh" -Method POST
+    if ($unauthorized.Status -eq 401) {
+        $passes++
+        Write-Host "  PASS  internal refresh rejects a missing key" -ForegroundColor Green
+    }
+    else {
+        $failures += "internal refresh rejects a missing key"
+        Write-Host "  FAIL  internal refresh rejects a missing key  (status $($unauthorized.Status), expected 401)" -ForegroundColor Red
+    }
+}
+else {
+    $result = Invoke-Api -Path "/internal/refresh" -Method POST
+    if ($result.Status -eq 200 -or $result.Status -eq 401) {
+        $passes++
+        $note = if ($result.Status -eq 401) { "guarded" } else { "open - no key configured" }
+        Write-Host "  PASS  internal refresh ($note)" -ForegroundColor Green
+    }
+    else {
+        $failures += "internal refresh"
+        Write-Host "  FAIL  internal refresh  (status $($result.Status), expected 200 or 401)" -ForegroundColor Red
+    }
+}
 
 Write-Host ""
 if ($failures.Count -gt 0) {

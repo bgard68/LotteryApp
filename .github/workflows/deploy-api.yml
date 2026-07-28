@@ -62,4 +62,11 @@ jobs:
       # run, so a broken deploy is known immediately - not when a visitor finds it.
       - name: Post-deploy smoke test
         shell: pwsh
+        env:
+          # Passed as an environment variable rather than an argument, so the key
+          # never appears in a command line. With it the test asserts both that
+          # the refresh endpoint accepts the key and that it rejects a caller
+          # without one; the script waits for /healthz before asserting, because
+          # a post-deploy run races App Service recycling the app.
+          REFRESH_KEY: ${{ secrets.REFRESH_KEY }}
         run: ./scripts/smoke-test.ps1 -BaseUrl ${{ vars.API_BASE_URL }}
