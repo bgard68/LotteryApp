@@ -1,0 +1,98 @@
+name: Cleanup workflow runs
+
+# Actions history grows without bound - this repo generates several runs per
+# push across CI, CodeQL, gitleaks and the two deploys. GitHub's own retention
+# setting is time-based (max 90 days); this is count-based, which is what you
+# actually want: "the last few runs of each workflow", regardless of how busy
+# a week was.
+#
+# Lives on main only. Runs are repo-wide, so one copy cleans every workflow
+# including the frontend branch's - and scheduled triggers fire only from the
+# default branch anyway.
+on:
+  schedule:
+    - cron: "0 4 * * 0" # Sundays, 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "Runs to keep per workflow"
+        default: "5"
+        required: false
+      keep_deployments:
+        description: "Runs to keep per deployment workflow"
+        default: "2"
+        required: false
+
+permissions:
+  actions: write # deleting runs is a write to the Actions API
+  contents: read
+
+jobs:
+  cleanup:
+    name: Prune old runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Delete superseded runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          KEEP: ${{ inputs.keep || '5' }}
+          KEEP_DEPLOY: ${{ inputs.keep_deployments || '2' }}
+          THIS_RUN: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          deleted=0
+          kept=0
+
+          # Iterate workflows rather than dumping every run: keeping "the last
+          # N of each" is meaningless across a mixed list.
+          gh api "repos/$REPO/actions/workflows" --paginate \
+            --jq '.workflows[] | [.id, .name, .path] | @tsv' |
+          while IFS=$'\t' read -r id name path; do
+            # Deployments keep fewer: their history is only useful for "what is
+            # live now" and "what did the last one do".
+            case "$path" in
+              *deploy-*) limit="$KEEP_DEPLOY" ;;
+              *)         limit="$KEEP" ;;
+            esac
+
+            # Completed runs only - never touch something in flight, including
+            # this cleanup run itself.
+            mapfile -t old < <(
+              gh api "repos/$REPO/actions/workflows/$id/runs?per_page=100&status=completed" \
+                --paginate --jq '.workflow_runs | sort_by(.created_at) | reverse | .[].id' \
+                | tail -n +$((limit + 1))
+            )
+
+            if [ "${#old[@]}" -eq 0 ]; then
+              echo "  $name - nothing to prune (keeping $limit)"
+              continue
+            fi
+
+            echo "  $name - keeping $limit, deleting ${#old[@]}"
+            for run in "${old[@]}"; do
+              [ "$run" = "$THIS_RUN" ] && continue
+              gh api -X DELETE "repos/$REPO/actions/runs/$run" --silent 2>/dev/null \
+                && deleted=$((deleted + 1)) \
+                || echo "    could not delete $run (already gone, or protected)"
+            done
+          done
+
+          echo "Done. Retention: $KEEP per workflow, $KEEP_DEPLOY per deployment."
+
+      - name: Summary
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          echo "### Remaining runs per workflow" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Workflow | Runs |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          gh api "repos/$REPO/actions/workflows" --paginate \
+            --jq '.workflows[] | [.id, .name] | @tsv' |
+          while IFS=$'\t' read -r id name; do
+            count=$(gh api "repos/$REPO/actions/workflows/$id/runs?per_page=1" --jq '.total_count')
+            echo "| $name | $count |" >> "$GITHUB_STEP_SUMMARY"
+          done
