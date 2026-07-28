@@ -689,3 +689,28 @@ file would have passed while production was unprotected.
 artefact that gets deployed, not the file in the repository. And verify the test
 fails when the control is removed - a green assertion that cannot go red is
 decoration.
+
+### Postscript: the same trap, one hour later, in CI
+
+The lesson above was written, committed - and then CI failed on it.
+
+The new smoke-test assertion went red with `header: CSP lockdown (got '')`,
+**31 passed, 1 failed**. The cause was identical to the one just documented:
+`ci.yml` starts the API with a bare `dotnet run`, which applies
+`launchSettings.json`, which forces Development, where the CSP is deliberately
+not sent. The header was correct; the harness was testing the wrong
+configuration - exactly as it had been locally an hour earlier.
+
+Knowing about a trap is not the same as having removed it. The local fix used
+`--no-launch-profile` on one command line; the CI workflow was a second place
+with the same defect and nothing connected them.
+
+**Fix:** the CI gate now starts the API with
+`ASPNETCORE_ENVIRONMENT=Production ... --no-launch-profile`, so it exercises the
+configuration that actually ships.
+
+**Lesson:** when a fix is "pass this flag", find every place that invokes the
+same command before calling it done. A lesson written into a document changes
+nothing on its own - only the flag in the workflow does. The saving grace here
+is that the gate caught it: the assertion was doing its job on its very first
+run, which is the strongest evidence it was worth adding.
