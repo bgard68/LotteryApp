@@ -9,6 +9,9 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Free version disclosure otherwise: every response advertised "Kestrel".
+builder.WebHost.ConfigureKestrel(options => options.AddServerHeader = false);
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
 builder.Services.AddHostedService<DrawRefreshService>();
@@ -101,6 +104,36 @@ catch (Exception ex)
 // First in the pipeline, and before the rate limiter in particular: it is what
 // turns Connection.RemoteIpAddress into the real caller.
 app.UseForwardedHeaders();
+
+// Security headers on every response, including error responses - which is why
+// this sits before everything that can short-circuit (CORS preflight, the rate
+// limiter's 429, the endpoints' 400s).
+//
+// This API returns JSON and nothing else: it never serves a document, never
+// loads a subresource, and has no reason to be embedded. So the policy is the
+// most restrictive one that exists rather than a curated allowlist.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "no-referrer";
+    headers["Cross-Origin-Resource-Policy"] = "cross-origin"; // the SWA origin must still fetch it
+
+    // Scalar (Development only) is a real HTML page and would break under a
+    // 'none' policy, so the lockdown applies where there is no such page.
+    if (!app.Environment.IsDevelopment())
+        headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'";
+
+    await next();
+});
+
+if (!app.Environment.IsDevelopment())
+{
+    // App Service already 301s HTTP to HTTPS; this tells the browser to stop
+    // trying plaintext at all, which closes the first-request window.
+    app.UseHsts();
+}
 
 app.UseCors(WebOrigins);
 app.UseRateLimiter();

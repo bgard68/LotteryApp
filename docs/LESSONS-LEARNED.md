@@ -633,3 +633,84 @@ hand before believing it - 15 failures and 12 passes is not what a broken
 deployment looks like, and the shape of the failure was the diagnosis. Third:
 any check that runs immediately after a deploy needs a readiness wait, or it is
 partly measuring startup timing rather than correctness.
+
+## 28. Two verification traps found while hardening the infrastructure
+
+Neither was an application bug. Both would have led to the wrong conclusion,
+and one of them nearly led to a wrong code change.
+
+**The environment was not the one under test.** Verifying a newly added
+Content-Security-Policy with
+
+```bash
+ASPNETCORE_ENVIRONMENT=Production dotnet run --project src/Lottery.Api
+```
+
+showed every other security header but no CSP. The header is deliberately
+skipped in Development (Scalar is a real HTML page and `default-src 'none'`
+would break it), so the obvious reading was "the environment check is wrong".
+
+It wasn't. **`dotnet run` applies `launchSettings.json`**, which sets
+`ASPNETCORE_ENVIRONMENT=Development` and overrides the variable on the command
+line. `--no-launch-profile` produced a genuine Production run and the header was
+there all along.
+
+**Lesson:** when a control appears missing, prove which environment you are
+actually in before touching the code. The next step would have been "fix" a
+correct conditional.
+
+**A CLI failure that was not the thing it named.** `az role assignment create`
+returned `MissingSubscription` under Git Bash even with a fully-qualified
+`--scope` and an explicit `--subscription`. Running the identical command from
+PowerShell worked immediately. A shell or auth-context quirk - but read at face
+value it says the subscription is wrong, which would send you auditing Azure
+rather than switching shells.
+
+**Lesson:** an error message names a symptom, not always a cause. Before
+believing a cloud-side problem, try the same call from a different client.
+
+### The prevention that generalised
+
+Both fixes in that round shipped with a guard, and the guards were pointed at
+the thing that actually ships:
+
+- API security headers: five smoke-test assertions, including one that asserts
+  the **absence** of the `Server` header. The suite went 28 to 32 checks.
+- Frontend security headers: `npm run check:swa`, run in CI against **`dist/`,
+  not the source tree**.
+
+That second choice is the one worth repeating. `staticwebapp.config.json` only
+reaches Azure if the asset pipeline copies it, and a site deployed without it
+**works perfectly** - every page renders, every request succeeds, and the only
+difference is that the security headers are gone. A test against the source
+file would have passed while production was unprotected.
+
+**Lesson:** when a control can go missing without breaking anything, test the
+artefact that gets deployed, not the file in the repository. And verify the test
+fails when the control is removed - a green assertion that cannot go red is
+decoration.
+
+### Postscript: the same trap, one hour later, in CI
+
+The lesson above was written, committed - and then CI failed on it.
+
+The new smoke-test assertion went red with `header: CSP lockdown (got '')`,
+**31 passed, 1 failed**. The cause was identical to the one just documented:
+`ci.yml` starts the API with a bare `dotnet run`, which applies
+`launchSettings.json`, which forces Development, where the CSP is deliberately
+not sent. The header was correct; the harness was testing the wrong
+configuration - exactly as it had been locally an hour earlier.
+
+Knowing about a trap is not the same as having removed it. The local fix used
+`--no-launch-profile` on one command line; the CI workflow was a second place
+with the same defect and nothing connected them.
+
+**Fix:** the CI gate now starts the API with
+`ASPNETCORE_ENVIRONMENT=Production ... --no-launch-profile`, so it exercises the
+configuration that actually ships.
+
+**Lesson:** when a fix is "pass this flag", find every place that invokes the
+same command before calling it done. A lesson written into a document changes
+nothing on its own - only the flag in the workflow does. The saving grace here
+is that the gate caught it: the assertion was doing its job on its very first
+run, which is the strongest evidence it was worth adding.

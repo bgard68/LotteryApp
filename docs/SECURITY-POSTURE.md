@@ -186,6 +186,156 @@ GitHub Secret Protection features, not part of what a public repository gets
 for free. Basic secret scanning and push protection are enabled and are the
 controls that matter here. Recorded so the gap is not rediscovered as a bug.
 
+## Senior DevOps / security review (2026-07-28)
+
+A second pass, this time reviewing the **running infrastructure** rather than
+the code: OIDC trust, RBAC scope, diagnostics, response headers, workflow
+supply chain. Findings D1-D10; the ones with an attack story are first.
+
+### D1 - An unused OIDC credential granted Contributor to any PR run
+
+Six federated credentials existed on the deploy app registration, two of them:
+
+```
+pull-request            repo:bgard68/LotteryApp:pull_request
+pull-request-immutable  repo:bgard68@.../LotteryApp@...:pull_request
+```
+
+That principal held **Contributor on the whole resource group**, and *no
+workflow used OIDC on `pull_request`* - `deploy-api.yml` triggers only on push
+to `main`. So it was a standing grant of resource-group-wide write to any
+workflow running in a PR context, for no benefit at all.
+
+GitHub withholds `id-token` from fork PRs, which caps the blast radius at
+branches inside the repo. That is a platform behaviour protecting us, not a
+control we chose - and relying on it is exactly the kind of assumption this
+review exists to find.
+
+**Fix:** both credentials deleted. Four remain, each pinned to a specific
+branch ref.
+
+**Prevention:** provisioning creates credentials per *trigger the workflows
+actually use*. Adding a `pull_request` credential is now a deliberate act that
+has to be justified, not a default.
+
+### D2 - Contributor was broader than the deploy needed
+
+The same principal had `Contributor` at `/resourceGroups/rg-lottery` - enough to
+delete the App Service plan, the Static Web App, and anything added later. The
+workflow publishes a zip to one web app.
+
+**Fix:** `Website Contributor`, scoped to the web app resource. The
+resource-group `Contributor` assignment was removed.
+
+**Verified, not assumed:** a `deploy-api` run was dispatched immediately after
+the change and succeeded end to end, including the smoke-test gate. A narrowed
+permission that silently breaks deploys is worse than the permission.
+
+### D3 - App Service diagnostics were entirely off
+
+```
+applicationLogs = Off   httpLogs = False   detailedErrors = False
+```
+
+No persistent diagnostic trail existed. This is the same blind spot that made
+[lesson 25](LESSONS-LEARNED.md) take a day: the crash loop was diagnosed from
+*restart counts*, because there were no logs to read.
+
+**Fix:** filesystem application logging at Warning, HTTP logging, detailed
+errors and failed-request tracing, all enabled. Free at this tier.
+
+**Caveat recorded:** App Service auto-disables filesystem logging after 12
+hours. It is the right control for "something is wrong now"; a durable trail
+needs a storage-account sink, which is the next step if this ever matters more.
+
+### D4 - The deployed site had no CSP and no anti-framing
+
+There was **no `staticwebapp.config.json` at all**. Azure supplies HSTS,
+`Referrer-Policy` and `X-Content-Type-Options` by default; everything else was
+absent. The site could be framed by any page, with no defence in depth against
+injected script.
+
+**Fix:** a config declaring CSP, `X-Frame-Options`, `Permissions-Policy` and a
+navigation fallback the SPA never had.
+
+**Guarded by a test, and pointed at the build output:** `npm run check:swa`
+runs in CI against `dist/`, not the source tree. The config only reaches Azure
+if the asset pipeline copies it - and a site deployed without it **works
+perfectly**. Nothing else in the suite would have noticed. The check was
+verified in both directions: green on the real build, and failing with a
+precise message when a header is deleted.
+
+### D5 - Deploy workflows could race
+
+No `concurrency:` anywhere. Two merges in quick succession could deploy out of
+order, with the older build winning.
+
+**Fix:** a concurrency group per deploy workflow, `cancel-in-progress: false` -
+serialise rather than cancel, because a half-finished deploy is worse than a
+queued one.
+
+### D6 - The API returned no security headers
+
+Responses carried only `Server: Kestrel` - free version disclosure, and nothing
+else.
+
+**Fix:** `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+`Cross-Origin-Resource-Policy` and (outside Development) a
+`default-src 'none'; frame-ancestors 'none'` CSP, plus HSTS. The Kestrel server
+header is suppressed.
+
+Placement matters and is commented in code: the middleware sits **before**
+everything that can short-circuit - CORS preflight, the rate limiter's 429, the
+endpoints' 400s - so error responses carry the headers too. The CSP lockdown is
+skipped in Development because Scalar is a real HTML page and `'none'` would
+break it.
+
+**Guarded by five smoke-test assertions**, including one that asserts the
+*absence* of `Server`. The suite went 28 -> 32 checks.
+
+### D7 - Third-party action on a moving tag
+
+`gitleaks/gitleaks-action@v2` runs on every push and PR, and `@v2` can be
+repointed at any time by its maintainer.
+
+**Fix:** pinned to a commit SHA on both branches.
+
+### D8 - 12 npm advisories, all dev-only (not fixed, deliberately)
+
+Production dependencies are clean; the affected packages are Angular's karma
+test tooling, which never reaches a browser. `npm audit fix --force` would
+rewrite the test runner to resolve advisories with no production exposure.
+Revisit when Angular updates the chain.
+
+### D9 - No rollback path (accepted)
+
+F1 has no deployment slots, so there is no blue/green and no instant swap-back.
+Rollback means reverting a commit and waiting for a deploy - a few minutes,
+gated by the smoke test. Acceptable at this tier; recorded so it is a decision
+rather than a discovery.
+
+### D10 - No backup, and that is genuinely fine (accepted)
+
+SQLite on `/home` has no backup and F1 offers none. The data is fully
+reconstructible: committed JSON snapshots plus a Socrata re-fetch, with the
+`ImportLedger` making re-seeding idempotent. Effective RPO is zero **by
+design** - but nothing recorded that reasoning, so a reader could not tell
+whether it had been considered or missed. Now it is written down.
+
+### Bugs hit while fixing these
+
+- **`az role assignment create` failed with `MissingSubscription`** under Git
+  Bash even with an explicit `--scope`. The same command from PowerShell worked.
+  A shell/auth-context quirk, not an Azure one - worth knowing before concluding
+  a permission model is broken.
+- **A verification ran against the wrong environment.** Testing the new CSP with
+  `ASPNETCORE_ENVIRONMENT=Production dotnet run` showed *no* CSP - because
+  `dotnet run` applies `launchSettings.json`, which forces Development and
+  overrides the environment variable. `--no-launch-profile` gave a true
+  Production run and the header appeared. The header was never missing; the test
+  was. **Lesson:** when a security control appears absent, confirm the
+  environment before changing the code.
+
 ## Dependency update policy
 
 Dependabot opens PRs; merging them is a judgment call, not a formality:

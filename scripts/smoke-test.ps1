@@ -28,7 +28,7 @@ function Invoke-Api {
     param([string]$Path, [string]$Method = "GET", [hashtable]$Headers = @{})
     try {
         $response = Invoke-WebRequest -Uri "$BaseUrl$Path" -Method $Method -Headers $Headers -UseBasicParsing -TimeoutSec 90
-        return @{ Status = [int]$response.StatusCode; Body = $response.Content }
+        return @{ Status = [int]$response.StatusCode; Body = $response.Content; Headers = $response.Headers }
     }
     catch {
         $status = 0
@@ -49,7 +49,7 @@ function Invoke-Api {
                 catch {}
             }
         }
-        return @{ Status = $status; Body = $body }
+        return @{ Status = $status; Body = $body; Headers = @{} }
     }
 }
 
@@ -87,6 +87,43 @@ if (-not $ready) {
 
 # --- Health first: fail fast if the stack is down ---
 Assert-Api "healthz" "/healthz" 200 "Healthy"
+
+# --- Security headers -------------------------------------------------------
+# These are trivial to add and just as trivial to lose: a middleware reordered
+# above the header block, or an exception path that short-circuits it, drops
+# them silently and nothing else would notice. Asserting them here makes the
+# deploy gate the thing that notices.
+function Assert-Header {
+    param([string]$Name, [string]$Header, [string]$Expected)
+    $result = Invoke-Api -Path "/healthz"
+    $actual = $result.Headers[$Header]
+    if ($actual -is [array]) { $actual = $actual -join "," }
+
+    if ($actual -and $actual -match [regex]::Escape($Expected)) {
+        $script:passes++
+        Write-Host "  PASS  $Name" -ForegroundColor Green
+    }
+    else {
+        $script:failures += $Name
+        Write-Host "  FAIL  $Name  (got '$actual', expected to contain '$Expected')" -ForegroundColor Red
+    }
+}
+
+Assert-Header "header: nosniff"        "X-Content-Type-Options" "nosniff"
+Assert-Header "header: frame deny"     "X-Frame-Options"        "DENY"
+Assert-Header "header: referrer"       "Referrer-Policy"        "no-referrer"
+Assert-Header "header: CSP lockdown"   "Content-Security-Policy" "frame-ancestors 'none'"
+
+# The server header is deliberately suppressed - its absence is the assertion.
+$serverHeader = (Invoke-Api -Path "/healthz").Headers["Server"]
+if (-not $serverHeader) {
+    $passes++
+    Write-Host "  PASS  header: no Server disclosure" -ForegroundColor Green
+}
+else {
+    $failures += "header: no Server disclosure"
+    Write-Host "  FAIL  header: no Server disclosure  (got '$serverHeader')" -ForegroundColor Red
+}
 
 # --- Happy paths, both games ---
 foreach ($game in @("powerball", "megamillions")) {
