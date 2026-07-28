@@ -61,17 +61,17 @@ describe('App', () => {
       expect(el.querySelector('app-ticket-checker')).toBeNull();
     });
 
-    it('swaps the cards for the checker when the Check tab is picked', async () => {
+    it('swaps the cards for the checker when the Tickets tab is picked', async () => {
       const { fixture, el } = await renderApp(true);
 
-      const check = tab(el, 'Check');
-      check.click();
+      const tickets = tab(el, 'Tickets');
+      tickets.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
       expect(el.querySelectorAll('app-game-card').length).toBe(0);
       expect(el.querySelector('app-ticket-checker')).toBeTruthy();
-      expect(check.getAttribute('aria-current')).toBe('page');
+      expect(tickets.getAttribute('aria-current')).toBe('page');
     });
 
     it('jumps to the wins tab once results arrive', async () => {
@@ -90,7 +90,7 @@ describe('App', () => {
     it('returns to the single-page layout when the viewport widens again', async () => {
       const { fixture, el, viewport } = await renderApp(true);
 
-      tab(el, 'Check').click();
+      tab(el, 'Tickets').click();
       await fixture.whenStable();
       fixture.detectChanges();
       expect(el.querySelectorAll('app-game-card').length).toBe(0);

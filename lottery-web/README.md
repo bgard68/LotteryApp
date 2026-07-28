@@ -65,7 +65,7 @@ same element sizes. Below 640px the shell becomes a three-tab app:
 | Tab | Shows |
 |---|---|
 | Games | Both game cards, one per row |
-| Check | Generate controls and the ticket rows |
+| Tickets | Generate controls and the ticket rows |
 | Wins | The big-wins panel and per-ticket match history |
 
 - **`Viewport` is a port**, not a `matchMedia` call inside a component: an
