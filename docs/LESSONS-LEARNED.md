@@ -714,3 +714,55 @@ same command before calling it done. A lesson written into a document changes
 nothing on its own - only the flag in the workflow does. The saving grace here
 is that the gate caught it: the assertion was doing its job on its very first
 run, which is the strongest evidence it was worth adding.
+
+## 29. Telling a platform outage apart from your own mistake
+
+**Symptom:** three consecutive Static Web Apps deploys failed, immediately after
+merging a change that added `staticwebapp.config.json` for the first time. The
+obvious reading - "the new config broke the deploy" - was wrong, and acting on
+it would have meant reverting a correct security fix.
+
+**What the log actually said:**
+
+```
+Using 'staticwebapp.config.json' file for configuration information,
+'routes.json' will be ignored.
+...
+We are currently experiencing problems communicating with our content server.
+Please try again later or file an issue if this behavior continues.
+```
+
+Azure **parsed and accepted** the config, then failed inside its own content
+service one line later. Read carefully, the log exonerates the change it appears
+to indict.
+
+**The evidence that settled it**, in order of weight:
+
+1. **A sibling service deployed fine in the same minute.** App Service published
+   successfully while Static Web Apps failed - so credentials, OIDC federation
+   and the subscription were all healthy. This is the strongest signal available
+   and it costs nothing to check.
+2. **The failure came after acceptance.** The config was validated before the
+   error, so it was not rejected.
+3. **The control plane was also unwell** - `az staticwebapp show` returned
+   `RemoteDisconnected` in the same window.
+4. **The error names their infrastructure**, and says "try again later".
+5. **A bad deployment token fails differently** - lesson 26 is what that looks
+   like, and this was not it.
+
+**What was NOT done:** no revert, no config edit, no retry loop. Three attempts
+across two trigger types is enough to establish a pattern; a fourth proves
+nothing and hammering a struggling service is not diagnosis.
+
+**The safety property worth noticing.** A failed SWA upload leaves the previous
+version serving - the site stayed fully functional throughout, on the old build.
+That is also why the deploy concurrency group added in the same round uses
+`cancel-in-progress: false`: a half-finished deploy is worse than a queued one,
+and the same instinct applies to both.
+
+**Lesson:** when a deploy fails right after your change, the cheapest
+disambiguation is to find something *else* that deployed in the same window. If
+a sibling service succeeded with the same credentials, the problem is not yours.
+Read the log for what was accepted before the failure, not just the red line at
+the bottom - a message that names the platform's own component and tells you to
+retry is describing itself, not you.
