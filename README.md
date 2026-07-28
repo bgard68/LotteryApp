@@ -192,6 +192,16 @@ live-feed validation, so a lottery rule change fails a run within days), and
 Remaining: the two deploy workflows are committed as manual-only skeletons
 awaiting the Azure resources + OIDC federation.
 
+## Deploying to Azure
+
+Free-tier provisioning is one command - `./scripts/provision-azure.ps1` -
+which discovers your subscription, tenant, region and repository rather than
+hardcoding them, creates F1 App Service + Free Static Web App + a $0 database,
+and wires GitHub OIDC so deployment needs no stored credential. What the free
+tier forces us to change (CORS instead of a linked backend; keep-alive instead
+of Always On) is documented in
+[docs/AZURE-DEPLOYMENT.md](docs/AZURE-DEPLOYMENT.md).
+
 ## Securing GitHub
 
 Full detail, including the audit that produced this configuration and the
@@ -209,6 +219,8 @@ In short:
   force-pushes and deletions blocked.
 - **Private vulnerability reporting** enabled, matching what
   [SECURITY.md](SECURITY.md) promises.
+- **gitleaks** on every push and PR, plus a weekly full-history sweep - covers
+  the *generic* secrets GitHub's free provider-pattern scanning misses.
 - **Zero-secrets design** - there are no secrets in this repo at all: local dev
   is SQLite (no credentials), production uses Azure Managed Identity (no SQL
   password exists) and Key Vault; deploys will use GitHub OIDC (no stored

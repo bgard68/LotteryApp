@@ -130,3 +130,22 @@ service-account*.json
 id_rsa*
 id_ed25519*
 *.asc
+
+# ---------- Azure provisioning & deployment output ----------
+# Anything the provisioning script or az CLI can emit that may carry resource
+# identifiers, tokens, or connection strings. The script writes NO secrets to
+# disk by design; these rules cover the artefacts other tooling produces.
+.azure/
+azure-resources.json
+provision-*.json
+provision-*.log
+*.deployment
+deployment-output.json
+*.azureauth
+azuredeploy.parameters.json
+main.parameters.json
+!main.parameters.example.json
+# Bicep compiles to ARM JSON next to the template - build it in CI, not here.
+main.json
+# Azure Developer CLI environment state (holds resolved connection strings)
+.azure/**/.env
