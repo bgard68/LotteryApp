@@ -134,3 +134,24 @@ service-account*.json
 id_rsa*
 id_ed25519*
 *.asc
+
+# ---------- Azure provisioning & deployment output ----------
+# Anything the provisioning script or az CLI can emit that may carry resource
+# identifiers, tokens, or connection strings.
+.azure/
+azure-resources.json
+provision-*.json
+provision-*.log
+*.deployment
+deployment-output.json
+*.azureauth
+azuredeploy.parameters.json
+main.parameters.json
+!main.parameters.example.json
+main.json
+.azure/**/.env
+
+# Angular runtime config written at deploy time from repository variables -
+# it holds only the public API URL, but it is generated, not authored.
+lottery-web/src/assets/config.json
+lottery-web/public/config.json
