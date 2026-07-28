@@ -94,6 +94,24 @@ same element sizes. Below 640px the shell becomes a three-tab app:
   and 44px touch targets; `main` reserves matching bottom padding so the
   footer is never trapped underneath it.
 
+## Link previews
+
+`index.html` carries Open Graph and Twitter card tags, and `public/social-card.jpg`
+(1200x627, the 1.91:1 ratio unfurlers crop to) ships with the build. Without them a
+shared URL renders as a bare title and no image on LinkedIn, Slack and iMessage.
+
+Two details that are easy to get wrong:
+
+- **`og:url` and `og:image` must be absolute.** Every crawler ignores relative
+  paths, so a `/social-card.jpg` that looks fine in the browser silently yields
+  no preview image.
+- **The image is served from this origin**, not from the repository or a CDN, so
+  it deploys and versions with the app rather than drifting independently.
+
+Both values hard-code the Static Web Apps hostname. A custom domain means editing
+them - there is no runtime substitution, because crawlers read the served HTML and
+never execute the app.
+
 ## API origin
 
 Requests go to `{API_BASE_URL}/api/*`. The value is resolved **at runtime**
