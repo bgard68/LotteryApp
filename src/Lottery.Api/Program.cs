@@ -26,13 +26,14 @@ builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 // ForwardLimit = 1 takes the RIGHTMOST X-Forwarded-For entry, which is the one
 // the front end appends. A client that sends its own X-Forwarded-For only adds
 // entries to the left of it, so the header cannot be forged to dodge the
-// limit. KnownNetworks/KnownProxies are cleared because the front end's
-// address is neither stable nor knowable.
+// limit. KnownIPNetworks/KnownProxies are cleared because the front end's
+// address is neither stable nor knowable. (KnownNetworks is obsolete in
+// .NET 10 - KnownIPNetworks is the replacement.)
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.ForwardLimit = 1;
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
