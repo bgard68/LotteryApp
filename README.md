@@ -236,7 +236,7 @@ In short:
   the *generic* secrets GitHub's free provider-pattern scanning misses.
 - **Zero-secrets design** - there are no secrets in this repo at all: local dev
   is SQLite (no credentials), production uses Azure Managed Identity (no SQL
-  password exists) and Key Vault; deploys will use GitHub OIDC (no stored
+  password exists); deploys use GitHub OIDC (no stored
   deploy credential). The only optional secret (a Socrata rate-limit token -
   [what it is and how to set it](docs/DATA-SOURCES.md#the-socrata-app-token-optional---and-the-app-runs-fine-without-one))
   lives in `dotnet user-secrets`, outside the repo tree. The refresh trigger's

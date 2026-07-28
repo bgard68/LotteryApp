@@ -70,23 +70,45 @@ requests/rolling hour). It is **not authentication** - the data is public -
 and this app's traffic (a few requests per week after the one-time snapshot)
 sits far below anonymous limits, so the token is genuinely optional.
 
-To use one anyway (e.g. if you re-capture snapshots repeatedly during
-development and hit HTTP 429):
+### Where to get one
 
-1. Create a free account at [data.ny.gov](https://data.ny.gov) -> profile ->
-   Developer settings -> **Create new app token**.
-2. Store it OUTSIDE the repo (never in any committed file):
+Create a free account at [data.ny.gov](https://data.ny.gov), then **profile ->
+Developer settings -> Create new app token**. The portal generates the value;
+it is never chosen or derived by this project, and no token value appears
+anywhere in this repository or its documentation.
 
-   ```bash
-   dotnet user-secrets set "Feeds:SocrataAppToken" "<your-token>" --project src/Lottery.Api
-   ```
+### Where it is stored
 
-   In Azure it would arrive via Key Vault/app settings under the same key.
-3. That's it - `SocrataWinningNumbersFeed` adds the `X-App-Token` header only
-   when the config value is present.
+The code asks configuration for a single key - `Feeds:SocrataAppToken` - and
+never knows which source answered. Each environment supplies it differently,
+and **none of them is a file in this repository**:
 
-Treat the token as a secret even though it protects nothing: it's tied to your
-account, and a published token lets strangers burn your rate allowance.
+| Environment | Physical location | How it gets there |
+|---|---|---|
+| Local development | `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json` - your machine, outside the repo | `dotnet user-secrets set "Feeds:SocrataAppToken" "<paste-token>" --project src/Lottery.Api` |
+| Azure (default) | App Service **application setting**, encrypted at rest and readable only with RBAC access to the app | `./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString)` |
+| Azure (`-WithKeyVault`) | **Key Vault** secret; the app setting holds only a reference | `./scripts/provision-azure.ps1 -SocrataToken $t -WithKeyVault` |
+
+Two mechanics worth knowing:
+
+- **Double underscore.** Environment variables cannot contain a colon, so
+  .NET maps `Feeds__SocrataAppToken` (the App Service setting) to
+  `Feeds:SocrataAppToken` (the config key). Same convention as
+  `Database__Provider` and `ConnectionStrings__Default`.
+- **Key Vault references.** With `-WithKeyVault` the app setting's *value* is
+  `@Microsoft.KeyVault(SecretUri=...)`. App Service resolves it at startup
+  using the app's managed identity, so the token never appears in
+  configuration and gains rotation and audit logging. The application code is
+  identical either way.
+
+The provisioning script takes the token as a **SecureString**, converts it at
+the last possible moment, clears it from memory immediately, and never writes
+or prints it. Nothing about the value reaches disk or the console.
+
+Treat the token as a secret even though it protects nothing: it is tied to
+your account, and a published one lets strangers burn your rate allowance.
+`SocrataWinningNumbersFeed` adds the `X-App-Token` header only when the config
+value is present, which is why every environment above is free to omit it.
 
 ## megamillions.com - jackpots (fully working)
 
