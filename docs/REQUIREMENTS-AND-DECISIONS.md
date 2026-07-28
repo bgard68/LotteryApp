@@ -51,6 +51,40 @@ Each decision as discussed and settled, with the deciding rationale.
 | D18 | **API-first build order, phased** | Phase 1 backend + tests + smoke test; Phase 2 live feeds; Phase 3 Angular; Phase 4 Azure + workflows. Each phase ships something runnable |
 | D19 | **Repo history order: empty init -> security -> line endings/ignore -> license -> code** | Dependabot + CodeQL + secret scanning + push protection active before any code landed; `.gitattributes` first so every file entered normalized |
 | D20 | **Angular mirrors the onion** | `core/domain` (pure TS) -> ports (`LotteryApi`, `CLOCK` injection tokens) -> adapters -> signal stores -> dumb components; DTO types generated from the OpenAPI document with a CI drift check |
+| D21 | **`Random.Shared`, not a CSPRNG, for pick generation** | Deliberate and reviewed (see the analysis below): our RNG produces play *suggestions*; the winning numbers are drawn by the lotteries' physical machines. Predictability confers no advantage on anyone, so cryptographic unpredictability buys nothing. Revisit trigger: any feature where our RNG settles a real outcome |
+
+## External review analyzed: why not a CSPRNG? (D21)
+
+An external code analysis of `RandomPickGenerator` praised the architecture
+(partial Fisher-Yates: O(k), no retry loop; era ranges from data per the
+open-closed principle; seeded-`Random` injection for deterministic tests;
+`Random.Shared` for thread safety) and flagged one "critical flaw":
+`Random.Shared` is xoshiro256** - statistically uniform but **predictable**.
+An observer who captures enough consecutive outputs can reconstruct the
+generator state and predict future outputs. The proposed fix was
+`RandomNumberGenerator.GetInt32` (CSPRNG) behind an `IRandomProvider`
+abstraction to preserve testability.
+
+**What the review gets right:** every technical claim. `Random.Shared` is
+predictable; the CSPRNG swap and the abstraction pattern are the correct fix
+*for systems where the RNG settles outcomes* - casinos, gaming platforms,
+lottery operators under GLI/state-board certification.
+
+**Why it does not apply here:** this application is not a lottery operator.
+Its RNG generates numbers a user might choose to play; the drawing that
+decides winners is performed by MUSL and Mega Millions with physical ball
+machines this system has no connection to. An attacker who fully recovered
+the generator state could predict... the next suggestion our server would
+make, which decides nothing and pays nothing. There is no stake, no house,
+and no adversary with a payoff. (Secondary point: interleaved multi-user
+draws from the shared instance also make clean sequence observation
+impractical - but the primary answer is that even perfect prediction is
+worthless here.)
+
+**Standing decision:** keep `Random.Shared`, document the rationale at the
+class (done) and here. The moment any feature makes this system's RNG decide
+a real outcome - even play-money - the CSPRNG becomes mandatory, and the
+existing constructor-injection seam is exactly where it slots in.
 
 ## Considered and rejected
 

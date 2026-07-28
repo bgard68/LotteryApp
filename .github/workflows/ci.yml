@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, frontend]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend build, tests, live smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore (locked)
+        run: dotnet restore --locked-mode
+
+      - name: Build
+        run: dotnet build --no-restore -warnaserror
+
+      - name: Test
+        run: dotnet test --no-build
+
+      # The smoke test runs against a REAL local instance: first boot migrates
+      # SQLite and seeds from the committed snapshots (offline), so this proves
+      # the whole stack end to end on every push.
+      - name: Start API
+        run: |
+          dotnet run --project src/Lottery.Api --no-build --urls http://localhost:5090 &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:5090/healthz && break
+            sleep 2
+          done
+
+      - name: Smoke test (all endpoints incl. error conditions)
+        shell: pwsh
+        run: ./scripts/smoke-test.ps1 -BaseUrl http://localhost:5090
