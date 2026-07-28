@@ -39,6 +39,16 @@ jobs:
           npx ng test --watch=false --browsers=ChromeHeadless
           npx ng build
 
+      # The free Static Web Apps SKU cannot proxy to a backend, so the browser
+      # calls the API origin directly. Written at deploy time from a repository
+      # VARIABLE (a public URL, not a secret) so one build artefact works in any
+      # environment - see docs/AZURE-DEPLOYMENT.md.
+      - name: Write runtime config
+        run: |
+          printf '{"apiBaseUrl":"%s"}' "${{ vars.API_BASE_URL }}" \
+            > lottery-web/dist/lottery-web/browser/config.json
+          cat lottery-web/dist/lottery-web/browser/config.json
+
       - name: Deploy to Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:

@@ -56,6 +56,17 @@ src/app/
   the balls that appear on your ticket flashing; a "Show 10/25/50/100/All
   matches per ticket" selector slices the fully-loaded results client-side.
 
+## API origin
+
+Requests go to `{API_BASE_URL}/api/*`. The value is resolved **at runtime**
+from `config.json` before bootstrap (`core/ports/api-base-url.ts`), defaulting
+to an empty string - meaning same origin, which is correct locally where the
+dev proxy handles `/api`. In Azure the deploy workflow writes that file from
+the `API_BASE_URL` repository variable, because the free Static Web Apps SKU
+has no linked-backend proxy and the browser must call the App Service origin
+directly. One build artefact therefore deploys to any environment; see
+[docs/AZURE-DEPLOYMENT.md](../docs/AZURE-DEPLOYMENT.md).
+
 ## Dev
 
 ```bash

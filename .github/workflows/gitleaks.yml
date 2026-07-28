@@ -1,0 +1,39 @@
+name: Secret scan
+
+# Covers the gap GitHub's free tier leaves: provider patterns catch ~200 known
+# vendor formats, but GENERIC secrets - a Socrata token, a hand-written
+# connection string, an Azure key pasted into a template - need non-provider
+# patterns, which require Advanced Security (unavailable here). See
+# docs/SECURITY-POSTURE.md.
+#
+# Deliberately added before any Azure provisioning work: a scanner installed
+# after the risky commits have landed is theatre.
+on:
+  push:
+    branches: [frontend]
+  pull_request:
+    branches: [frontend]
+  schedule:
+    - cron: "0 7 * * 1" # weekly full-history sweep
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Full history: the scheduled run re-validates every commit ever
+          # made, not just the current diff.
+          fetch-depth: 0
+
+      - name: Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+          GITLEAKS_ENABLE_SUMMARY: true
