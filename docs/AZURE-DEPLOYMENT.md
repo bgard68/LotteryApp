@@ -191,6 +191,33 @@ APM attached, readable production stack traces are worth a few hundred KB.
 There is no `wwwroot`: the API serves no static files. The Angular app deploys
 separately to Static Web Apps, which is the point of the two-host split.
 
+## Startup failures do not restart-loop
+
+App Service restarts a container that exits, so a configuration error in
+startup work becomes an unbounded loop - one missing directory once consumed
+this plan's entire 60-minute daily CPU quota in about fifteen minutes across
+51 restarts ([lesson 25](LESSONS-LEARNED.md)).
+
+The app therefore:
+
+- **creates its SQLite parent directory** before connecting (SQLite makes
+  files, never directories);
+- **catches startup database failures**, logs `LogCritical` including the
+  connection string in use, and starts anyway - failing loudly and *once*;
+- **reports the truth on `/healthz`**, which runs a real query rather than
+  answering "OK" merely because the process is alive. Unhealthy is what the
+  deploy gate, the keep-alive workflow and Azure all watch.
+
+If the quota is exhausted, Azure returns **HTTP 403 "Web App - Unavailable"**
+from its own infrastructure - the app never sees the request. Check with:
+
+```bash
+az webapp show --name <api-app-name> --resource-group rg-lottery   --query "{state:state, usage:usageState}" -o tsv
+```
+
+`QuotaExceeded` resets daily at midnight UTC. Restart counts, which reveal a
+loop immediately, come from the site's `usages` endpoint as `WPStopRequests`.
+
 ## Guarding against accidents
 
 Provisioning and deployment introduce the file types where credentials get

@@ -469,3 +469,67 @@ already written that lesson down twice did not prevent a third instance -
 which suggests the rule needs to be mechanical rather than remembered:
 anything executable ships only after it has been run, or it ships explicitly
 labelled as unverified.
+
+## 25. A missing directory became a crash loop that burned a day's CPU quota
+
+**Symptom:** the first deployment to Azure succeeded, then every endpoint
+returned **503**. The App Service reported `state: QuotaExceeded` and Azure
+served its own "Web App - Unavailable" page. An entire day's F1 allowance -
+60 CPU-minutes - was gone within roughly fifteen minutes of the app existing.
+
+**Cause:** the provisioning script set the connection string to
+`Data Source=/home/data/lottery.db`, and **nothing created `/home/data`**.
+SQLite creates database *files*; it never creates *directories*. On a fresh
+App Service that path does not exist, so startup threw
+"unable to open database file".
+
+That alone would be a small bug. What made it expensive was the **feedback
+loop**: startup work ran before `app.Run()`, so the exception killed the
+process; App Service restarted it; it failed again. Metrics recorded
+**51 worker stop requests**. Each attempt re-ran migrations and re-attempted
+the 4,493-row seed from scratch, because the import ledger is only written on
+success. Fifty-one failed seedings is what consumed the quota - not the cost
+of seeding once, which is trivial.
+
+**Why nothing caught it:** every repository test used a path under the system
+temp directory, which always exists. The one condition that mattered in
+production - a directory that is absent - was the one condition never
+exercised. The local run had the same blind spot: `lottery.db` sat beside the
+binary in a directory that obviously existed.
+
+**Fixes applied, in order of value:**
+
+1. **The bug.** `SqliteConnectionFactory` now creates the parent directory at
+   construction, before anything connects. Handles `:memory:` and
+   directory-less relative paths.
+2. **The regression test.** `SqliteDirectoryTests` opens a database in a
+   directory that does not exist, and runs migrations against a nested missing
+   path. Verified honestly: with the fix disabled, 2 of 4 tests fail.
+3. **The loop.** Startup database work is wrapped in a `try`/`catch` that logs
+   `LogCritical` **including the connection string in use** and lets the app
+   start anyway. It fails loudly and *once* instead of restarting forever.
+4. **The signal.** `/healthz` now runs a real `DatabaseHealthCheck` - a cheap
+   count query proving connectivity, schema, and seeded data. A process that
+   is running but cannot read its data now reports **Unhealthy** instead of
+   answering "OK" while every real request 500s.
+
+**Being proactive about this class of failure:**
+
+- **Never let startup work kill the process on a platform that restarts you.**
+  App Service, Kubernetes and systemd all restart on exit, which converts one
+  configuration error into an unbounded resource burn. Catch, log, stay up,
+  report unhealthy - a dead-but-diagnosable instance beats an invisible loop.
+- **Health checks must ask the dependency, not the process.** "The web server
+  answered" proves nothing about whether the app can work.
+- **Test the absence, not just the presence.** Missing directory, missing file,
+  missing environment variable, empty database. Tests that only run in
+  well-formed environments certify nothing about a fresh one.
+- **Read the platform's own counters before theorising.** `WPStopRequests: 51`
+  identified a restart loop in seconds and disproved my first explanation
+  (that seeding over network storage was inherently expensive). Quota state,
+  restart counts and usage metrics are all one CLI call away.
+- **Environment parity is where these hide.** The bug needed three things
+  present at once - a path with a directory component, that directory being
+  absent, and a platform that restarts on exit. No local run had all three.
+  When production differs structurally from dev, enumerate the differences and
+  test each one deliberately.

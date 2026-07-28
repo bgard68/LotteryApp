@@ -10,8 +10,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks();
 builder.Services.AddHostedService<DrawRefreshService>();
+
+// The health check answers "can this instance actually serve requests?", which
+// means asking the database - a process that is running but cannot read its
+// data is not healthy, and /healthz is what the keep-alive workflow, the
+// deploy gate and Azure all watch.
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
 // Public anonymous API: per-client ceiling so a scraper cannot run up compute.
 // 120/min default - a multi-ticket check is up to 10 calls, so an active human
@@ -42,13 +47,36 @@ builder.Services.AddCors(options => options.AddPolicy(WebOrigins, policy =>
 var app = builder.Build();
 
 // Migrations then one-time seed, before serving traffic.
-app.Services.GetRequiredService<IDatabaseInitializer>().Initialize();
-var importer = app.Services.GetRequiredService<ImportHistory>();
-foreach (var game in Enum.GetValues<Game>())
+//
+// Startup work that throws makes the host exit, and a platform that restarts
+// on exit (App Service, Kubernetes, systemd) will do so indefinitely: each
+// attempt repeats the migration and the 4,493-row seed, which is how a single
+// missing directory once consumed an entire day's F1 CPU quota in minutes.
+// So: fail LOUDLY, and fail ONCE. The app stays up, reports unhealthy, and a
+// human sees the cause in one log entry rather than in a restart count.
+try
 {
-    var summary = await importer.ExecuteAsync(game, CancellationToken.None);
-    if (!summary.Skipped)
-        app.Logger.LogInformation("Seeded {Count} {Game} draws from snapshot.", summary.DrawCount, game);
+    app.Services.GetRequiredService<IDatabaseInitializer>().Initialize();
+
+    var importer = app.Services.GetRequiredService<ImportHistory>();
+    foreach (var game in Enum.GetValues<Game>())
+    {
+        var summary = await importer.ExecuteAsync(game, CancellationToken.None);
+        if (!summary.Skipped)
+            app.Logger.LogInformation("Seeded {Count} {Game} draws from snapshot.", summary.DrawCount, game);
+    }
+}
+catch (Exception ex)
+{
+    // No flag needed: the health check asks the database directly, so a failed
+    // startup surfaces as an unhealthy /healthz without any state to track.
+    app.Logger.LogCritical(ex,
+        "DATABASE STARTUP FAILED. The API will report unhealthy and serve 503s "
+        + "rather than restart-looping. Connection string in use: {ConnectionString}",
+        // The SQLite path is not a secret; a SQL Server string uses Managed
+        // Identity and carries no password. Logging it turns "it won't start"
+        // into "it cannot open THIS path", which is the whole diagnosis.
+        builder.Configuration.GetConnectionString("Default"));
 }
 
 app.UseCors(WebOrigins);
