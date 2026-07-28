@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CheckerStore } from './checker-store';
 import { FakeLotteryApi } from './fake-lottery-api';
-import { ApiUnreachableError, LotteryApi, RateLimitedError } from '../ports/lottery-api';
+import { ApiUnreachableError, LotteryApi, RateLimitedError, TicketMatchDto } from '../ports/lottery-api';
 
 describe('CheckerStore', () => {
   let store: CheckerStore;
@@ -159,5 +159,95 @@ describe('CheckerStore', () => {
     api.generateError = new Error('boom');
     await store.generate();
     expect(store.error()).toContain('Something went wrong');
+  });
+
+  // The big-win threshold is a rule, and two consumers read it: the highlighted
+  // panel and the mobile tab badge. Boundary cases only - "3 or more whites AND
+  // the special" has three distinct ways to be wrong.
+  describe('bigWins threshold', () => {
+    function match(whiteMatches: number, specialMatched: boolean): TicketMatchDto {
+      return {
+        drawDate: '2026-07-25',
+        whiteMatches,
+        specialMatched,
+        drawnWhiteBalls: [3, 4, 24, 36, 47],
+        drawnSpecial: 17,
+        tier: `Match ${whiteMatches}${specialMatched ? ' + PB' : ''}`,
+        approximateAmount: 100,
+        isJackpot: false,
+      };
+    }
+
+    function resultWith(matches: TicketMatchDto[]) {
+      return { status: 'Ok', drawsChecked: 1971, historySince: '2010-02-03', matches };
+    }
+
+    async function checkWith(matches: TicketMatchDto[]): Promise<void> {
+      api.checkResult = resultWith(matches);
+      fillTicket(0, [7, 19, 33, 51, 64], 18);
+      await store.check();
+    }
+
+    it('is empty before any check has run', () => {
+      expect(store.bigWins()).toEqual([]);
+    });
+
+    it('counts 3 whites plus the special - the exact boundary', async () => {
+      await checkWith([match(3, true)]);
+      expect(store.bigWins().length).toBe(1);
+    });
+
+    it('rejects 2 whites plus the special (one short)', async () => {
+      await checkWith([match(2, true)]);
+      expect(store.bigWins()).toEqual([]);
+    });
+
+    it('rejects 3 whites without the special', async () => {
+      await checkWith([match(3, false)]);
+      expect(store.bigWins()).toEqual([]);
+    });
+
+    it('rejects 5 whites without the special - white count alone never qualifies', async () => {
+      await checkWith([match(5, false)]);
+      expect(store.bigWins()).toEqual([]);
+    });
+
+    it('accepts 4 and 5 whites plus the special', async () => {
+      await checkWith([match(4, true), match(5, true)]);
+      expect(store.bigWins().length).toBe(2);
+    });
+
+    it('keeps only the qualifying matches out of a mixed result', async () => {
+      await checkWith([match(0, true), match(2, true), match(3, true), match(3, false), match(5, true)]);
+      expect(store.bigWins().map((w) => w.match.whiteMatches)).toEqual([3, 5]);
+    });
+
+    it('carries the ticket index and its draft so the row can be highlighted', async () => {
+      await checkWith([match(3, true)]);
+      const win = store.bigWins()[0];
+      expect(win.ticket).toBe(0);
+      expect(win.draft.whites).toEqual([7, 19, 33, 51, 64]);
+    });
+
+    it('covers unchecked tickets too - a win must never hide behind a checkbox', async () => {
+      store.setCount(2);
+      fillTicket(0, [7, 19, 33, 51, 64], 18);
+      fillTicket(1, [2, 14, 22, 38, 51], 12);
+      store.toggleSelected(1); // ticket 2 unchecked
+      api.checkResult = resultWith([match(3, true)]);
+
+      await store.check();
+
+      expect(store.bigWins().map((w) => w.ticket)).toEqual([0, 1]);
+    });
+
+    it('clears when the results are discarded by an edit', async () => {
+      await checkWith([match(3, true)]);
+      expect(store.bigWins().length).toBe(1);
+
+      store.setWhite(0, 0, 8);
+
+      expect(store.bigWins()).toEqual([]);
+    });
   });
 });
