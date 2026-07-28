@@ -590,3 +590,46 @@ system that says nothing more useful than "invalid". Where a value must be
 exact, prefer an explicit argument or `printf '%s'` over a pipeline, and
 verify by *using* the credential rather than by observing that the write
 succeeded.
+
+## 27. Hardening an endpoint broke the deploy gate that was watching it
+
+**Symptom:** the post-deploy smoke test failed with **15 failures, 12 passed**.
+Every assertion expecting a 400 or a 404 reported 500, `/draws` reported 500,
+and `/internal/refresh` reported 500. It read like a catastrophic regression -
+except the live API, queried by hand a minute later, answered `/draws` 200,
+unknown game 404, and `count=0` 400. All correct.
+
+**Two unrelated causes wearing one costume.**
+
+*The real one:* the F8 fix set `Refresh:Key`, so `POST /internal/refresh` now
+returns 401 without the header. The smoke test asserted a flat `200`. Securing
+the endpoint invalidated the test that guarded it - and because that test had
+been correct for weeks, the failure looked like the deploy rather than the
+hardening.
+
+*The noisy one:* the other 14 failures were a **cold-start race**. The smoke
+test fires the instant `webapps-deploy` returns, while App Service is still
+recycling; requests landing in that window get 500. The interleaved pass/fail
+pattern (`generate` passes at 15:00:13, `draws` fails at 15:00:14) is the
+signature - a genuine breakage does not repair itself between two requests one
+second apart.
+
+**Fix:** the script now polls `/healthz` until the host answers before
+asserting anything, and treats the refresh guard as something to *test* rather
+than assume. Given a key it asserts both directions - the keyed call succeeds
+**and** an unkeyed call is rejected with 401. Given no key it accepts 200 or
+401, because "open" is correct locally where no key is configured. The deploy
+workflow passes the secret through the environment, never as an argument, so
+it cannot surface in a command line.
+
+Verified both ways before merging: 27 checks green with no key ("internal
+refresh (guarded)"), 28 green with one.
+
+**Lessons.** First: a security change has a blast radius that includes your own
+tests, and the deploy gate is the most likely casualty precisely because it
+exercises everything. When you harden something, grep the test suite for it in
+the same change. Second: when a smoke test fails wholesale, query the target by
+hand before believing it - 15 failures and 12 passes is not what a broken
+deployment looks like, and the shape of the failure was the diagnosis. Third:
+any check that runs immediately after a deploy needs a readiness wait, or it is
+partly measuring startup timing rather than correctness.
