@@ -166,6 +166,31 @@ The script sets every repository variable the workflows need. Then:
    gate - a failed smoke test fails the deployment
    ([D17](REQUIREMENTS-AND-DECISIONS.md)).
 
+## What actually gets deployed
+
+`dotnet publish` emits build output and declared content only - the repository
+itself is never uploaded. Verified against a real publish:
+
+| | Files | Size |
+|---|---|---|
+| Default publish | 112 | 130 MB |
+| `-r linux-x64 --self-contained false` (what the workflow does) | 72 | **52 MB** |
+
+The saving is entirely native SQLite binaries for platforms this app will never
+run on - android-arm, ios-arm64, browser-wasm, linux-s390x and about thirty
+more, bundled by SQLitePCLRaw for every platform by default. Targeting the App
+Service's actual platform keeps only `libe_sqlite3.so`. That matters on F1,
+whose storage is shared with the SQLite database on `/home`.
+
+What ships: four assemblies plus dependencies, `appsettings*.json`,
+`web.config`, runtime config, and the native SQLite library. What does not:
+source files, the local `lottery.db`, docs, scripts, project files, `.git` -
+all confirmed absent. **PDBs are kept deliberately** - on a free tier with no
+APM attached, readable production stack traces are worth a few hundred KB.
+
+There is no `wwwroot`: the API serves no static files. The Angular app deploys
+separately to Static Web Apps, which is the point of the two-host split.
+
 ## Guarding against accidents
 
 Provisioning and deployment introduce the file types where credentials get
