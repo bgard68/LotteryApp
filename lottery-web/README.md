@@ -117,6 +117,18 @@ and rate-limited/unreachable/generic error messaging), and an App shell
 render smoke test. No HTTP mocking anywhere - the port abstraction makes
 fakes trivial.
 
+## Workflows on this branch
+
+`main` and `frontend` are never merged, so this branch carries only the
+workflows that can fire here: `ci.yml`, `ci-frontend.yml` (specs, build,
+OpenAPI drift check), `codeql.yml` (JavaScript/TypeScript - the C# analysis
+lives on `main`), `gitleaks.yml`, and `deploy-web.yml`.
+
+**Deployment is automatic**: pushing changes under `lottery-web/**` builds,
+tests, writes `config.json` from the `API_BASE_URL` variable, and deploys to
+Azure Static Web Apps - independently of the API, which deploys from `main`
+([D15](../docs/REQUIREMENTS-AND-DECISIONS.md)).
+
 ## Generated API types
 
 `core/api/schema.d.ts` is generated from the running backend:
