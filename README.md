@@ -86,6 +86,10 @@ Ranges come from the **rule-era table**, never from constants: Powerball is
 5/69 + 1/26 today but was 5/59 + 1/35 before October 2015, and the generator
 respects whatever era is current. Production uses `Random.Shared`
 (thread-safe); tests inject a seeded `Random` for deterministic assertions.
+Non-cryptographic randomness is a reviewed, deliberate choice - these are
+play suggestions, not stake-settling draws; the full analysis (including why
+a CSPRNG would be mandatory if our RNG ever decided a real outcome) is in
+[decision D21](docs/REQUIREMENTS-AND-DECISIONS.md#external-review-analyzed-why-not-a-csprng-d21).
 
 ## TimeProvider vs IDateTimeProvider
 
@@ -145,11 +149,15 @@ and failure modes: [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md). Summary:
 
 ## Workflows
 
-See [docs/workflows/README.md](docs/workflows/README.md). Current:
-**CodeQL** (C# static analysis on push/PR + weekly) and **Dependabot** (weekly
-NuGet + Actions update PRs). Planned in Phase 4: path-filtered deploys (API and
-frontend deploy independently), a post-deploy smoke-test gate, a keep-alive
-ping around draw times, and a weekly era-check run.
+See [docs/workflows/README.md](docs/workflows/README.md). Active:
+**CodeQL** (C# static analysis on push/PR + weekly), **Dependabot** (weekly
+NuGet + Actions update PRs), **CI** (build + tests + a live smoke test of a
+real running instance on every push), **CI frontend** (specs + build + OpenAPI
+client drift check, `frontend` branch), **era check** (weekly test suite +
+live-feed validation, so a lottery rule change fails a run within days), and
+**keep-alive** (draw-time pings; no-op until a deployment URL is configured).
+Remaining: the two deploy workflows are committed as manual-only skeletons
+awaiting the Azure resources + OIDC federation.
 
 ## Securing GitHub
 

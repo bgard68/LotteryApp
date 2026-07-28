@@ -27,14 +27,52 @@ Dependabot *alerts* and *automated security fixes* are also enabled at the
 repo-settings level, so a disclosed vulnerability opens a fix PR without
 waiting for the weekly schedule.
 
-## Planned (Phase 4)
+### CI (`ci.yml`)
+
+On every push to `main` and `frontend`: locked restore, build with warnings
+as errors, the full backend test suite, then an **end-to-end smoke test
+against a real running instance** - the API boots on the runner (migrates
+SQLite, seeds from the committed snapshots, all offline) and
+`scripts/smoke-test.ps1` exercises every endpoint including the error
+conditions.
+
+### CI frontend (`ci-frontend.yml`)
+
+`frontend` branch only (the Angular app never merges into `main`): `npm ci`,
+all specs on headless Chrome, a production build, and the **OpenAPI client
+drift check** - the committed `schema.d.ts` is regenerated from the running
+API's OpenAPI document and any diff fails the build, so the frontend can
+never quietly disagree with the backend contract (decision D20).
+
+### Era check (`era-check.yml`)
+
+Weekly (Mondays 06:00 UTC) + manual: runs the full test suite - including
+the era-coverage test over all 4,493 committed drawings - then boots the API
+and triggers a live refresh cycle, failing if the live feed produced any
+era-invalid draws. This is what turns "the lottery changed its rules" into a
+red run within days instead of a silent mis-validation (decision D10,
+lessons-learned #6).
+
+### Keep alive (`keep-alive.yml`)
+
+Scheduled around draw times (cron pairs cover both EDT and EST): warms
+`/healthz` before each drawing and triggers `POST /internal/refresh` after,
+so results land promptly without paying for App Service Always On (decision
+D16). **No-op until the `API_BASE_URL` repo variable is set** - safe to have
+enabled before anything is deployed. Sends the optional `X-Refresh-Key`
+header from the `REFRESH_KEY` secret when configured.
+
+## Deploy skeletons (manual-only until Azure exists)
 
 | Workflow | Purpose |
 |---|---|
-| `deploy-api.yml` | Path-filtered (`src/**`): build, test, deploy the API to Azure App Service via **OIDC** (no stored credentials), then run `scripts/smoke-test.ps1` against the live URL as a **deploy gate** - a failed smoke test fails the deployment |
-| `deploy-web.yml` | Path-filtered (`lottery-web/**`): build and deploy the Angular app to Azure Static Web Apps - frontend and backend deploy independently |
-| `keep-alive.yml` | Scheduled pings to `/healthz` around draw times so the App Service is awake to fetch results (free-tier alternative to Always On) |
-| `era-check.yml` | Weekly run of the era-coverage test against the live feed, so a future lottery rule change surfaces within days, not on the next commit |
+| `deploy-api.yml` | Test -> publish -> **OIDC** login (no stored credential, decision D14) -> App Service deploy -> `smoke-test.ps1` against the live URL as the **deploy gate** (D17). Push trigger (path-filtered `src/**`) is committed but commented out until the App Service + federation exist |
+| `deploy-web.yml` | Specs -> deploy to Azure Static Web Apps (linked backend proxies `/api/*`, no CORS - D15). Lives on the `frontend` branch; push trigger (path-filtered `lottery-web/**`) commented out until the SWA exists |
+
+Activation checklist when Azure is provisioned: set repo variables
+`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
+`API_APP_NAME`, `API_BASE_URL`, secret `AZURE_STATIC_WEB_APPS_API_TOKEN`
+(and optionally `REFRESH_KEY`), then uncomment both push triggers.
 
 ## Conventions
 

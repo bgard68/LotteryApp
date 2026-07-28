@@ -10,6 +10,12 @@ public interface IPickGenerator
 /// <summary>
 /// Uniform picks via partial Fisher-Yates shuffle - no retry loop, provably uniform.
 /// Production uses Random.Shared; tests inject a seeded Random for determinism.
+/// Non-cryptographic randomness is deliberate (decision D21): these are play
+/// suggestions, not stake-settling draws - the real winning numbers come from
+/// the lotteries' physical machines, so nothing here depends on
+/// unpredictability. If an RNG ever decides a real outcome in this system,
+/// switch to a CSPRNG (RandomNumberGenerator.GetInt32) behind this same
+/// injection seam.
 /// </summary>
 public sealed class RandomPickGenerator(Random? random = null) : IPickGenerator
 {

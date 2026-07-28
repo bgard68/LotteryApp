@@ -1,0 +1,57 @@
+name: Deploy API
+
+# SKELETON - manual trigger only until the Azure resources exist.
+# Once the App Service is provisioned and GitHub->Azure OIDC federation is
+# configured (no stored deploy credential, decision D14), do two things:
+#   1. Set repo variables: AZURE_CLIENT_ID, AZURE_TENANT_ID,
+#      AZURE_SUBSCRIPTION_ID, API_APP_NAME, API_BASE_URL.
+#   2. Uncomment the push trigger below so backend changes deploy
+#      independently of the frontend (decision D15).
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - "src/**"
+  #     - "Directory.*.props"
+  #     - ".github/workflows/deploy-api.yml"
+
+permissions:
+  contents: read
+  id-token: write # OIDC federation - GitHub proves its identity per run
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Test before deploy
+        run: dotnet test
+
+      - name: Publish
+        run: dotnet publish src/Lottery.Api -c Release -o publish
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.API_APP_NAME }}
+          package: publish
+
+      # The deploy gate (decision D17): a red smoke test fails the deployment
+      # run, so a broken deploy is known immediately - not when a visitor finds it.
+      - name: Post-deploy smoke test
+        shell: pwsh
+        run: ./scripts/smoke-test.ps1 -BaseUrl ${{ vars.API_BASE_URL }}
