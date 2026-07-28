@@ -9,6 +9,11 @@ Please report suspected vulnerabilities privately via
 You can expect an acknowledgment within a few days. Please include steps to
 reproduce and the potential impact.
 
+## Posture
+
+What is enabled and why - plus the audit behind it - is documented in
+[docs/SECURITY-POSTURE.md](docs/SECURITY-POSTURE.md).
+
 ## Scope
 
 This is a portfolio application with no authentication, no user accounts, and

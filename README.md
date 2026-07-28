@@ -194,13 +194,21 @@ awaiting the Azure resources + OIDC federation.
 
 ## Securing GitHub
 
-Enabled on this repo before any code was pushed (and verifiable in Settings):
+Full detail, including the audit that produced this configuration and the
+dependency-update policy: [docs/SECURITY-POSTURE.md](docs/SECURITY-POSTURE.md).
+In short:
 
 - **Secret scanning + push protection** - a pushed credential is blocked before
   it lands in history.
-- **Dependabot alerts + automated security fixes** - vulnerable dependencies
-  open PRs automatically.
-- **CodeQL** static analysis - runs on every push/PR and weekly.
+- **Dependabot alerts + security updates + weekly version updates** - NuGet,
+  npm, and GitHub Actions, across **both** branches (the frontend entries
+  declare `target-branch`, since Dependabot reads config only from `main`).
+- **CodeQL** with the `security-extended` suite - C# on `main` built for full
+  dataflow fidelity, JavaScript/TypeScript on `frontend`.
+- **Branch protection** on both branches - PR required, CI required green,
+  force-pushes and deletions blocked.
+- **Private vulnerability reporting** enabled, matching what
+  [SECURITY.md](SECURITY.md) promises.
 - **Zero-secrets design** - there are no secrets in this repo at all: local dev
   is SQLite (no credentials), production uses Azure Managed Identity (no SQL
   password exists) and Key Vault; deploys will use GitHub OIDC (no stored

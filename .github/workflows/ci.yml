@@ -1,8 +1,11 @@
 name: CI
 
+# This branch's copy governs main. The frontend branch carries its own copy
+# targeting that branch - the two are never merged, so each is maintained
+# independently.
 on:
   push:
-    branches: [main, frontend]
+    branches: [main]
   pull_request:
     branches: [main]
 
