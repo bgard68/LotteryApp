@@ -349,3 +349,34 @@ dependency-update policy so future updates do this as a matter of course.
 **Lesson:** every gate you add changes what "a passing dependency update"
 requires - when you turn on locked-mode restore, automated update PRs inherit
 a new manual step until tooling catches up.
+
+## 21. Security configuration drifted silently as the project changed shape
+
+**Symptom:** an on-demand audit (prompted by the user, not by any process)
+found four gaps at once - the entire frontend had no CodeQL or Dependabot
+coverage, CodeQL ran in reduced-fidelity buildless mode, SECURITY.md pointed
+at a reporting feature that was never enabled, and neither branch was
+protected - plus seven dependency PRs sitting untriaged. Every finding is
+recorded individually in SECURITY-POSTURE.md (F1-F4); this entry is the root
+cause they share.
+
+**Cause:** security settings were configured once, at repo creation, when the
+project was C#-only with a single branch - and were correct for that shape.
+The architecture then changed underneath them: the frontend branch appeared
+with a new language and package ecosystem, the never-merge policy made it a
+separate world, and CI arrived expecting protection that was still "planned".
+Nothing forced a re-check because **configuration does not fail loudly** -
+wrong code breaks a test, but a branch CodeQL silently does not cover stays
+green forever. Each phase rigorously verified its own new code while the
+cross-cutting settings quietly went stale. Contributing failure: noticing
+without scheduling (the stale Dependabot PRs were spotted early and left for
+"later") is the same as not noticing.
+
+**Fix:** the audit itself, plus SECURITY-POSTURE.md as the living record of
+what is enabled and why - a written claim that can be re-verified, unlike a
+memory of having clicked a setting once.
+**Lesson:** audit settings at every phase boundary, not once at setup. Any
+change to the repo's *shape* - a new branch, language, package ecosystem, or
+workflow - should trigger the question "does the security and CI
+configuration still match?" Config needs the same verification cadence as
+code, precisely because it has no tests to fail on its behalf.
