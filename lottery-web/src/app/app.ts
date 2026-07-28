@@ -6,7 +6,7 @@ import { GameCard } from './ui/game-card/game-card';
 import { CheckerSection, TicketChecker } from './ui/ticket-checker/ticket-checker';
 
 /** Sections of the phone layout. Desktop shows all of them on one page. */
-export type MobileTab = 'games' | 'check' | 'wins';
+export type MobileTab = 'games' | 'tickets' | 'wins';
 
 /** The only smart shell: wires the dashboard store to the presentational UI. */
 @Component({
@@ -28,7 +28,7 @@ export class App {
   protected readonly showGames = computed(() => !this.viewport.isMobile() || this.tab() === 'games');
   protected readonly showChecker = computed(() => !this.viewport.isMobile() || this.tab() !== 'games');
   protected readonly checkerSection = computed<CheckerSection>(() =>
-    !this.viewport.isMobile() ? 'all' : this.tab() === 'check' ? 'entry' : 'results');
+    !this.viewport.isMobile() ? 'all' : this.tab() === 'tickets' ? 'entry' : 'results');
 
   protected readonly winCount = computed(() => this.checker.bigWins().length);
 
