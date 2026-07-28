@@ -228,7 +228,9 @@ export interface paths {
         };
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    count?: number | string;
+                };
                 header?: never;
                 path: {
                     game: string;
