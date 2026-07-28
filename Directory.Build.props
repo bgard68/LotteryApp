@@ -6,5 +6,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- The deployment target. Declaring it here keeps the committed lock
+         files consistent for BOTH a plain restore and `publish -r linux-x64`;
+         without it the two disagree and locked-mode restore fails NU1004. -->
+    <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
   </PropertyGroup>
 </Project>

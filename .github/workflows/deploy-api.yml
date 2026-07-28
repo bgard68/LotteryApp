@@ -34,8 +34,14 @@ jobs:
       - name: Test before deploy
         run: dotnet test
 
+      # -r linux-x64 targets the App Service platform, which drops the native
+      # SQLite binaries for ~30 platforms we never run on (android, iOS, wasm,
+      # s390x...): 130 MB -> 52 MB. --self-contained false keeps using the
+      # shared runtime on the App Service rather than shipping our own.
+      # PDBs are deliberately kept: on a free tier with no APM, readable
+      # production stack traces are worth a few hundred KB.
       - name: Publish
-        run: dotnet publish src/Lottery.Api -c Release -o publish
+        run: dotnet publish src/Lottery.Api -c Release -r linux-x64 --self-contained false -o publish
 
       - name: Azure login (OIDC)
         uses: azure/login@v3

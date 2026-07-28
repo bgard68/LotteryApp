@@ -417,3 +417,27 @@ silent - nothing errors, you just get a 404 where a page used to be. Verify
 what the *base URL* of a service actually returns; it is the first thing any
 human hitting the service will see, and it is easy to never test because no
 automated check ever browses it.
+
+## 23. A RID-specific publish silently rewrites the lock files
+
+**Symptom:** trimming the deployment payload with
+`dotnet publish -r linux-x64` worked locally, but CI then failed every
+project with `NU1004: The project's runtime identifiers have changed`.
+
+**Cause:** the publish performed an implicit restore *for that RID*, which
+rewrote the committed `packages.lock.json` files to include linux-x64 assets.
+Those rewritten files were committed along with the workflow change. CI's
+restore runs **without** a RID and in `--locked-mode`, so the lock files it
+found no longer matched the projects it was restoring - the mirror image of
+the Dependabot lock-file mismatch in the dependency policy.
+
+**Fix:** declare the target explicitly -
+`<RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>` in
+`Directory.Build.props` - so the RID is part of the normal restore graph.
+Both paths then agree: a plain locked-mode restore and a
+`publish -r linux-x64` produce the same lock content.
+**Lesson:** committed lock files make the *restore graph* part of your source,
+so any flag that changes that graph - a RID, a target framework, a package
+addition - has to be declared in the project rather than passed ad hoc on one
+command. Otherwise the flag silently edits a committed file and the next
+locked restore rejects it.
