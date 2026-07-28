@@ -24,7 +24,7 @@ jobs:
       security-events: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # build-mode none is correct for JS/TS: CodeQL analyzes the sources
       # directly, no compilation step is involved.
