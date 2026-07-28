@@ -448,13 +448,19 @@ foreach ($v in $variables.GetEnumerator()) {
     Write-Ok "variable $($v.Key)"
 }
 
-# The SWA deployment token is a genuine secret: piped straight from az into
-# gh, never written to disk and never printed.
+# The SWA deployment token is a genuine secret: it goes straight from az into
+# gh and is never written to disk or printed.
+#
+# NOT piped: PowerShell appends a newline when piping to a native command's
+# stdin, which silently corrupts the token - Azure then rejects every
+# deployment with "deployment_token provided was invalid". --body passes the
+# exact value. It is visible in this machine's process list for the duration
+# of the call, which is a smaller risk than a broken deploy pipeline.
 $swaToken = Invoke-Az staticwebapp secrets list --name $swaName --resource-group $resourceGroup `
     --query "properties.apiKey"
-$swaToken | & gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --repo $repoSlug 2>&1 | Out-Null
+& gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --repo $repoSlug --body $swaToken 2>&1 | Out-Null
 Remove-Variable swaToken -ErrorAction SilentlyContinue
-Write-Ok "secret AZURE_STATIC_WEB_APPS_API_TOKEN (piped, never stored locally)"
+Write-Ok "secret AZURE_STATIC_WEB_APPS_API_TOKEN (never written to disk)"
 
 # ------------------------------------------------------------------- summary
 Write-Step "Done"

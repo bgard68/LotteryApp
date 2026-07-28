@@ -559,3 +559,34 @@ are choosing to keep. Before scheduling work around a wait, check whether the
 thing being waited on can simply be replaced. And when someone proposes a
 faster path, test it against the evidence you already have rather than the
 plan you already made.
+
+## 26. PowerShell's pipe corrupted a secret, and the failure surfaced far away
+
+**Symptom:** the first frontend deployment failed with
+`deployment_token provided was invalid`, despite the token having been read
+directly from Azure moments earlier by the provisioning script.
+
+**Cause:** the script piped it into GitHub:
+
+```powershell
+$swaToken | & gh secret set AZURE_STATIC_WEB_APPS_API_TOKEN --repo $repoSlug
+```
+
+PowerShell **appends a newline when piping to a native command's stdin**, so
+the stored secret carried a trailing character. Nothing complained: `gh`
+accepted it, the secret existed, and the value was unreadable afterwards by
+design. The corruption only surfaced later, in a different system, as an
+authentication failure with no hint of whitespace.
+
+**Fix:** pass the value as an argument (`--body`) rather than through the pipe.
+It is briefly visible in the local process list - a smaller risk than a
+deployment pipeline that cannot authenticate - and it never touches disk.
+
+**Lesson:** treat *any* value crossing a shell boundary as
+whitespace-sensitive, and be especially wary with secrets, because the usual
+feedback loop is missing - you cannot read the stored value back to compare it.
+The bug is invisible at the point of failure and only manifests in a remote
+system that says nothing more useful than "invalid". Where a value must be
+exact, prefer an explicit argument or `printf '%s'` over a pipeline, and
+verify by *using* the credential rather than by observing that the write
+succeeded.
