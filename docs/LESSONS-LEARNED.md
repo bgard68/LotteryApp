@@ -375,8 +375,15 @@ without scheduling (the stale Dependabot PRs were spotted early and left for
 **Fix:** the audit itself, plus SECURITY-POSTURE.md as the living record of
 what is enabled and why - a written claim that can be re-verified, unlike a
 memory of having clicked a setting once.
+**Second instance, found later:** the documented `dotnet user-secrets` path
+could not run at all, because no `UserSecretsId` was ever added to the project
+(audit finding F5) - an instruction written but never executed, exactly like
+the disabled reporting feature in F3.
+
 **Lesson:** audit settings at every phase boundary, not once at setup. Any
 change to the repo's *shape* - a new branch, language, package ecosystem, or
 workflow - should trigger the question "does the security and CI
 configuration still match?" Config needs the same verification cadence as
-code, precisely because it has no tests to fail on its behalf.
+code, precisely because it has no tests to fail on its behalf. And every
+documented security procedure should be **run once** before it is published -
+an instruction nobody has executed is a guess.
