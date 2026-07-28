@@ -1,0 +1,41 @@
+# gitleaks configuration
+#
+# Why this exists: GitHub's free secret scanning matches ~200 KNOWN VENDOR
+# formats. Generic secrets - a homegrown API token, a hand-written connection
+# string, an Azure key pasted into a Bicep template - are only covered by
+# non-provider patterns, which require GitHub Advanced Security and are not
+# available on this repository. gitleaks fills exactly that gap, and it is
+# added BEFORE the Azure work rather than after, because deployment templates,
+# provisioning scripts and workflow YAML are precisely the committed files
+# where a credential gets pasted "just to test it".
+
+title = "LotteryApp"
+
+[extend]
+useDefault = true # all upstream rules: cloud keys, tokens, private keys, etc.
+
+[allowlist]
+description = "Known-safe matches - documentation and code that DESCRIBES credentials without containing one"
+
+paths = [
+  # Lock files are generated hashes, not secrets.
+  '''packages\.lock\.json$''',
+  '''package-lock\.json$''',
+]
+
+regexes = [
+  # Connection-string SHAPES in docs and code. These are templates and
+  # comments, never values: the architecture uses Managed Identity, so a
+  # production connection string contains no password at all.
+  '''Authentication=Active Directory Default''',
+  '''Data Source=lottery\.db''',
+  '''Data Source=/home/data/lottery\.db''',
+  '''Server=tcp:\$''',
+  '''Server=tcp:\{''',
+  # Placeholder conventions used throughout the docs.
+  '''<your-token>''',
+  '''<angle-bracket-description>''',
+  # GitHub Actions expressions reference secrets by NAME; the value never
+  # appears in the file.
+  '''\$\{\{\s*secrets\.[A-Z_]+\s*\}\}''',
+]

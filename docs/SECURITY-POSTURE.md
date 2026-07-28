@@ -33,7 +33,8 @@ and the code, because there is no data or credential to defend.
 |---|---|---|
 | Secret scanning | On | Catches a committed credential even though the design should never produce one |
 | Push protection | On | Blocks the push *before* a secret enters history - remediation after the fact is far worse |
-| Non-provider secret patterns | Unavailable | Requires GitHub Advanced Security, which this free public repo does not have; the API accepts the setting and silently leaves it disabled |
+| Non-provider secret patterns | Unavailable | Requires GitHub Advanced Security, which this free public repo does not have; the API accepts the setting and silently leaves it disabled - **gitleaks covers this gap** |
+| gitleaks | Push, PR, weekly full history | Catches the *generic* secrets provider patterns miss: a Socrata token, a hand-written connection string, an Azure key pasted into a template |
 | Dependabot alerts + security updates | On | Vulnerable dependency opens a fix PR without waiting for the weekly schedule |
 | Dependabot version updates | Weekly, grouped | NuGet + npm + GitHub Actions across both branches (see below) |
 | CodeQL | Push, PR, weekly | C# on `main`, JavaScript/TypeScript on `frontend`, `security-extended` query suite |
@@ -142,10 +143,28 @@ before any of it was trusted. The triage also surfaced lesson 20 above: the
 first NuGet PR through the new CI failed locked-mode restore, which is exactly
 the kind of latent gap a first real run exists to find.
 
-## What is deliberately not done
+## Reversed decision: gitleaks is now in CI
 
-- **A gitleaks CI step.** Secret scanning with push protection covers the same
-  ground earlier (at push time rather than after the commit lands).
+It was originally listed here as deliberately skipped, on the grounds that
+push protection covered the same ground. **That reasoning was wrong once F1
+established what the free tier actually provides.** GitHub's free secret
+scanning matches ~200 *known vendor* formats; generic secrets are covered only
+by non-provider patterns, which need Advanced Security we do not have. The
+realistic leak candidates here are all generic: the optional Socrata token, a
+hand-written connection string, an Azure key.
+
+Timing drove the decision as much as coverage. Azure provisioning introduces
+Bicep templates, deploy scripts and workflow YAML - files that *must* be
+committed, so `.gitignore` offers no protection, and precisely where a value
+gets pasted "just to test it". A scanner added after that work would never
+have watched the commits where the risk was highest, so it went in first.
+
+Configuration lives in `.gitleaks.toml`, with an allowlist for connection
+string *shapes* that appear in documentation and code without containing a
+value (the architecture uses Managed Identity, so a production connection
+string has no password in it at all).
+
+## What is deliberately not done
 - **SHA-pinning actions.** Tag pinning plus Dependabot keeps actions current;
   SHA pinning trades that automation for supply-chain rigidity that this
   repository's threat model does not justify.
