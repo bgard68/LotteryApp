@@ -82,6 +82,39 @@ retry loop (a naive "random until unique" loop can spin; a plain array fill
 produces duplicate numbers on one ticket). The special ball is drawn from its
 own independent range - the two pools never mix.
 
+### Fisher-Yates, and why "partial"
+
+The **[Fisher-Yates shuffle](https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle)**
+is the standard algorithm for putting a list into a perfectly random order: walk
+the array once, and at each position swap the current element with a randomly
+chosen element from the not-yet-visited remainder. Every permutation comes out
+exactly equally likely, in O(n) time - it is the algorithmic equivalent of
+drawing numbered balls from a bag one at a time, where each pull removes the
+ball from play.
+
+The **partial** variant is the observation that a lottery ticket doesn't need
+all 69 balls shuffled - only the first five draws matter. So the loop stops
+after five iterations:
+
+```csharp
+var pool = Enumerable.Range(1, era.WhiteBallMax).ToArray();   // [1..69]
+for (var i = 0; i < 5; i++)
+{
+    var j = _random.Next(i, pool.Length);   // pick from the undrawn remainder
+    (pool[i], pool[j]) = (pool[j], pool[i]); // move it into the "drawn" prefix
+}
+// pool[0..4] is now a uniform 5-of-69 draw without replacement
+```
+
+After the loop, positions 0-4 hold five distinct, uniformly drawn numbers -
+identical in distribution to a full shuffle's first five elements, at O(k)
+cost instead of O(n). Because each drawn ball is swapped out of the remaining
+pool, duplicates are *structurally impossible* - no "check and re-roll" loop
+whose worst case is unbounded. The same page covers the classic
+implementation mistakes the tests guard against (off-by-one ranges that make
+the distribution subtly non-uniform - our full-range coverage test asserts
+every ball 1..69 and 1..26 actually appears).
+
 Ranges come from the **rule-era table**, never from constants: Powerball is
 5/69 + 1/26 today but was 5/59 + 1/35 before October 2015, and the generator
 respects whatever era is current. Production uses `Random.Shared`
