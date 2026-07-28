@@ -98,6 +98,27 @@ same element sizes. Below 640px the shell becomes a three-tab app:
   and 44px touch targets; `main` reserves matching bottom padding so the
   footer is never trapped underneath it.
 
+## Security headers
+
+`public/staticwebapp.config.json` sets a Content Security Policy, `X-Frame-Options`,
+`X-Content-Type-Options`, `Referrer-Policy` and a `Permissions-Policy` on every
+response. Before it existed the site had **no CSP and no anti-framing** - Static
+Web Apps supplies HSTS and nosniff by default, and nothing else.
+
+Two things the policy has to get right, both of which would break the app rather
+than fail visibly:
+
+- **`connect-src` must name the API origin.** The free SWA SKU has no linked
+  backend, so the browser calls App Service directly - a policy without it blocks
+  every request the app makes.
+- **`style-src` needs `'unsafe-inline'`.** Angular injects component styles as
+  inline `<style>` elements; without it the page renders unstyled.
+
+`npm run check:swa` asserts the headers survived, and CI runs it against the
+**built output** rather than the source. That is the failure this guards: the
+file only reaches Azure if the asset pipeline copies it, and a site deployed
+without it works perfectly - nothing else would notice.
+
 ## Link previews
 
 `index.html` carries Open Graph and Twitter card tags, and `public/social-card.jpg`
