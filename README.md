@@ -16,7 +16,7 @@ past drawings do not predict future ones. Verify any win with the official lotte
 | Database | SQLite (local dev) / Azure SQL serverless (production) |
 | Time | .NET `TimeProvider` ([why](#timeprovider-vs-idatetimeprovider)) |
 | Frontend | Angular 20 - lives on the **`frontend` branch** (`lottery-web/`), never merged into `main` |
-| Hosting | Azure Static Web Apps + App Service (Phase 4, planned) |
+| Hosting | Azure Static Web Apps (frontend) + App Service (API) - **live**, $0/month |
 | Packages | Central Package Management (`Directory.Packages.props`) + committed lock files |
 
 ## Architecture
@@ -35,7 +35,7 @@ graph LR
 - **[Application](src/Lottery.Application/README.md)** - use cases and the port interfaces (`IDrawRepository`, `IHistorySource`, ...) that Infrastructure implements.
 - **[Infrastructure](src/Lottery.Infrastructure/README.md)** - Dapper repositories, connection factories, DbUp migrations, history seeding.
 - **[Api](src/Lottery.Api/README.md)** - the composition root: minimal API endpoints, DI wiring, health checks, rate limiting.
-- **[Tests](tests/README.md)** - 49 tests across all layers; [scripts](scripts/README.md) holds the PowerShell smoke test.
+- **[Tests](tests/README.md)** - 72 tests across all layers; [scripts](scripts/README.md) holds the PowerShell smoke test.
 
 SOLID throughout: one reason to change per class (SRP), ports owned by the layer
 that uses them (DIP), new adapters instead of edited use cases (OCP), and no
@@ -195,15 +195,22 @@ and failure modes: [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md). Summary:
 
 ## Workflows
 
-See [docs/workflows/README.md](docs/workflows/README.md). Active:
-**CodeQL** (C# static analysis on push/PR + weekly), **Dependabot** (weekly
-NuGet + Actions update PRs), **CI** (build + tests + a live smoke test of a
-real running instance on every push), **CI frontend** (specs + build + OpenAPI
-client drift check, `frontend` branch), **era check** (weekly test suite +
-live-feed validation, so a lottery rule change fails a run within days), and
-**keep-alive** (draw-time pings; no-op until a deployment URL is configured).
-Remaining: the two deploy workflows are committed as manual-only skeletons
-awaiting the Azure resources + OIDC federation.
+Full detail in [docs/workflows/README.md](docs/workflows/README.md). Each
+branch carries only the workflows that can actually run there - `main` and
+`frontend` are never merged, so each maintains its own set.
+
+**On `main`:** CI (build, tests, live smoke test), CodeQL (C#, built for full
+dataflow), gitleaks, era check (weekly - catches a real-world lottery rule
+change), keep-alive (draw-time pings, since F1 has no Always On), cleanup
+(prunes old runs by count), and **Deploy API** - automatic on backend changes,
+gated by the smoke test.
+
+**On `frontend`:** CI, CI frontend (specs, build, OpenAPI client drift check),
+CodeQL (JavaScript/TypeScript), gitleaks, and **Deploy frontend** - automatic
+on `lottery-web/**` changes.
+
+**Repo-wide:** Dependabot (weekly NuGet, npm and Actions updates across both
+branches).
 
 ## Deploying to Azure
 
@@ -312,7 +319,7 @@ pwsh scripts/smoke-test.ps1 -BaseUrl http://localhost:5000
 dotnet test
 ```
 
-68 tests, all layers - including DST-boundary schedule tests driven by
+72 tests, all layers - including DST-boundary schedule tests driven by
 `FakeTimeProvider`, an **era-coverage test** that validates all 4,493
 historical draws against the rule-era table, and feed contract tests against
 recorded real payloads. Details in [tests/README.md](tests/README.md).

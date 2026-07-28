@@ -159,12 +159,14 @@ The whole pipeline runs without a stored credential:
 
 The script sets every repository variable the workflows need. Then:
 
-1. Uncomment the push trigger in `.github/workflows/deploy-api.yml` (on `main`)
-   and `.github/workflows/deploy-web.yml` (on `frontend`).
-2. Push or run those workflows manually.
-3. The API deploy runs `scripts/smoke-test.ps1` against the live URL as its
-   gate - a failed smoke test fails the deployment
-   ([D17](REQUIREMENTS-AND-DECISIONS.md)).
+Deployment is then **automatic**: backend changes on `main` deploy the API,
+frontend changes on `frontend` deploy the site, each path-filtered so one never
+triggers the other ([D15](REQUIREMENTS-AND-DECISIONS.md)). Both keep
+`workflow_dispatch` for manual runs.
+
+The API deploy runs `scripts/smoke-test.ps1` against the live URL as its gate -
+a failed smoke test fails the deployment ([D17](REQUIREMENTS-AND-DECISIONS.md)),
+which has already caught a broken deploy in practice.
 
 ## What actually gets deployed
 
