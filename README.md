@@ -6,6 +6,14 @@ ticket checking against 24 years of real drawing history.
 Not affiliated with MUSL, Powerball, or Mega Millions. Random picks are random -
 past drawings do not predict future ones. Verify any win with the official lottery.
 
+## Demo
+
+![Ten Powerball tickets generated and checked against every stored drawing - live jackpots and countdowns, then results including three Match 3 + Powerball hits](demo/lotteryapp-demo.gif)
+
+Recorded against the **deployed** app: every jackpot, countdown and drawing above
+is real data served by the live API. Ten tickets generated, then checked against
+all 1,972 stored Powerball drawings.
+
 ## Tech stack
 
 | Layer | Technology |
