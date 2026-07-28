@@ -51,6 +51,7 @@ Each decision as discussed and settled, with the deciding rationale.
 | D18 | **API-first build order, phased** | Phase 1 backend + tests + smoke test; Phase 2 live feeds; Phase 3 Angular; Phase 4 Azure + workflows. Each phase ships something runnable |
 | D19 | **Repo history order: empty init -> security -> line endings/ignore -> license -> code** | Dependabot + CodeQL + secret scanning + push protection active before any code landed; `.gitattributes` first so every file entered normalized |
 | D20 | **Angular mirrors the onion** | `core/domain` (pure TS) -> ports (`LotteryApi`, `CLOCK` injection tokens) -> adapters -> signal stores -> dumb components; DTO types generated from the OpenAPI document with a CI drift check |
+| D22 | **Separate resource group; do not share the existing SQL database or App Service plan** | Consolidation saves nothing (F1 plans and resource groups are free) while adding contention - a shared F1 plan splits 60 CPU-minutes/day, and the existing database's free allowance is metered per database, so this app could starve an unrelated running app. Separate groups also keep teardown surgical. Full analysis below |
 | D21 | **`Random.Shared`, not a CSPRNG, for pick generation** | Deliberate and reviewed (see the analysis below): our RNG produces play *suggestions*; the winning numbers are drawn by the lotteries' physical machines. Predictability confers no advantage on anyone, so cryptographic unpredictability buys nothing. Revisit trigger: any feature where our RNG settles a real outcome |
 
 ## External review analyzed: why not a CSPRNG? (D21)
@@ -112,3 +113,63 @@ smoke checks against a live run):
   `rule-eras`, `generate`, `healthz`; per-IP rate limiting; OpenAPI.
 - Phases 2-4 as in D18; hosting as in D15; automation as in D16/D17 plus
   CodeQL, Dependabot, secret scanning, push protection from day zero.
+
+## Considered: consolidating into an existing resource group (D22)
+
+**The question asked, after provisioning:** could this project reuse the SQL
+database already running in another resource group, and place its own
+resources alongside the existing web API and static web app rather than
+standing up a separate group?
+
+Technically yes to both. The plan stayed unchanged anyway, for reasons worth
+recording since the question will recur.
+
+### What was already deployed in that subscription
+
+| Group | Contents |
+|---|---|
+| `rg-taskboard` | SQL server + `taskboard` database (serverless, **free allowance already consumed**, auto-paused when idle), a Key Vault, an **F1 Free** App Service plan hosting one app, two OIDC identities |
+| `taskboard-05-web_group` | The TaskBoard static web app (Free) |
+| `rg-net10sudoku` | Another F1 Free plan |
+
+### Reusing the database
+
+Two routes, both rejected:
+
+- **A second database on the existing server** would be **billed**. Azure's
+  free offer is one database per *subscription* and `taskboard` holds it. A
+  serverless General Purpose database costs real money per month, which
+  contradicts the free-tier requirement.
+- **Sharing the `taskboard` database** (lottery tables under their own schema)
+  *is* free, but the free offer meters **100,000 vCore-seconds per month for
+  that database**, and the configured exhaustion behaviour is auto-pause.
+  Lottery traffic would draw from TaskBoard's allowance: this project could
+  **starve an unrelated production app**, and a bad migration would land in
+  the same database as it.
+
+### Sharing the resource group or App Service plan
+
+- Resource-group placement is organisational only - free either way, with no
+  technical benefit.
+- Sharing the F1 plan **saves nothing**, because F1 plans cost $0: three of
+  them cost exactly what one costs. What it adds is contention - F1 grants
+  **60 CPU-minutes per day per plan**, shared by every app on it, so the two
+  APIs would compete for the same quota.
+- Separate groups keep the blast radius clean:
+  `az group delete --name rg-lottery` removes this project and nothing else.
+
+### Decision
+
+**Keep the separate `rg-lottery` group and SQLite on `/home`.** Consolidation
+buys no money and costs isolation.
+
+### The honest counter-argument
+
+There is one real argument for sharing that database: **portfolio value**. It
+is the only free way to exercise the Dapper SQL Server dialect, Managed
+Identity authentication, and the serverless-wake retry logic - all of which
+currently ship without production coverage (see the SQLite note in
+[Azure deployment](AZURE-DEPLOYMENT.md)). That trade is isolation of a
+running app in exchange for demonstrating an untested code path. It was
+declined; if it is ever taken up, it needs a dedicated `lottery` schema and
+its own DbUp migration-history table so the two apps cannot collide.
