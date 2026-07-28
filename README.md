@@ -21,7 +21,7 @@ all 1,972 stored Powerball drawings.
 | Backend | .NET 10 (LTS), C# 14, ASP.NET Core minimal APIs |
 | Data access | Dapper (micro-ORM) - **no EF Core, no DbContext** ([why](#database-no-dbcontext)) |
 | Migrations | DbUp, embedded per-provider SQL scripts |
-| Database | SQLite (local dev) / Azure SQL serverless (production) |
+| Database | SQLite - dev **and** production, on App Service's persistent `/home`. Azure SQL is supported and config-switched, but deliberately not provisioned ([what actually runs](docs/ARCHITECTURE.md#what-is-actually-running-in-azure)) |
 | Time | .NET `TimeProvider` ([why](#timeprovider-vs-idatetimeprovider)) |
 | Frontend | Angular 20 - lives on the **`frontend` branch** (`lottery-web/`), never merged into `main` |
 | Hosting | Azure Static Web Apps (frontend) + App Service (API) - **live**, $0/month |
@@ -38,6 +38,10 @@ graph LR
     Infra --> App[Lottery.Application<br/>use cases, ports]
     App --> Domain[Lottery.Domain<br/>schedule, eras, matcher, generator]
 ```
+
+The full picture - the request path end to end, the middleware chain and why its
+order matters, the background refresh, and what is actually provisioned in Azure
+- is in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 - **[Domain](src/Lottery.Domain/README.md)** - pure logic, zero dependencies: draw schedule, rule eras, ticket matching, prize tiers, pick generation.
 - **[Application](src/Lottery.Application/README.md)** - use cases and the port interfaces (`IDrawRepository`, `IHistorySource`, ...) that Infrastructure implements.
