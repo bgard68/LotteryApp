@@ -5,6 +5,27 @@ What runs automatically on this repo and why. Workflow definitions live in
 
 Back to the [main README](../../README.md).
 
+## Which workflows live on which branch
+
+`main` and `frontend` are never merged, so **each branch carries only the
+workflows that can actually fire there.** A workflow triggering on
+`branches: [frontend]` is inert if it sits on `main`, and a `schedule` trigger
+fires **only from the default branch** regardless of which branches hold the
+file. Duplicating them across branches leaves dead files that silently diverge
+from the live copy.
+
+| Workflow | `main` | `frontend` | Why |
+|---|---|---|---|
+| `ci.yml` | yes | yes | Each branch tests its own pushes and PRs |
+| `codeql.yml` | yes (C#) | yes (JS/TS) | Different language per branch - the Angular app only exists on `frontend` |
+| `gitleaks.yml` | yes | yes | Each branch scans its own commits |
+| `ci-frontend.yml` | - | yes | Angular specs, build, OpenAPI drift check |
+| `deploy-api.yml` | yes | - | The API deploys from `main` only |
+| `deploy-web.yml` | - | yes | The frontend deploys from `frontend` only |
+| `era-check.yml` | yes | - | Scheduled: fires only from the default branch |
+| `keep-alive.yml` | yes | - | Scheduled: same |
+| `cleanup-runs.yml` | yes | - | Scheduled, and runs are repo-wide |
+
 ## Current
 
 ### CodeQL (`codeql.yml`)
@@ -36,9 +57,9 @@ SQLite, seeds from the committed snapshots, all offline) and
 `scripts/smoke-test.ps1` exercises every endpoint including the error
 conditions.
 
-### CI frontend (`ci-frontend.yml`)
+### CI frontend (`ci-frontend.yml`) - `frontend` branch
 
-`frontend` branch only (the Angular app never merges into `main`): `npm ci`,
+The Angular app never merges into `main`, so this file lives only there: `npm ci`,
 all specs on headless Chrome, a production build, and the **OpenAPI client
 drift check** - the committed `schema.d.ts` is regenerated from the running
 API's OpenAPI document and any diff fails the build, so the frontend can
