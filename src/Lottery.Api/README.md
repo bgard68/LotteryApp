@@ -42,6 +42,18 @@ demand - optionally guarded by an `X-Refresh-Key` header when `Refresh:Key`
 is set in the environment (never in a committed file). If the host was asleep
 at draw time, the next startup or refresh call self-heals.
 
+## API documentation
+
+`GET /` returns an index of the API rather than a 404 - games, endpoints, and
+links. In Development, `/scalar` serves an **interactive reference** rendered
+from the OpenAPI document; `launchSettings.json` opens it, so pressing F5 in
+Visual Studio lands somewhere useful.
+
+There is deliberately no Swagger UI: .NET 9 removed Swashbuckle from the
+templates and the built-in `AddOpenApi()` emits the document only. Scalar is
+mapped in Development alone - the document stays available everywhere, but a
+browsable UI is not something a public production API needs to expose.
+
 ## Configuration
 
 `appsettings.json` holds the non-secret baseline (`Database:Provider: Sqlite`);

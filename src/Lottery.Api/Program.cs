@@ -4,6 +4,7 @@ using Lottery.Application.Abstractions;
 using Lottery.Application.UseCases;
 using Lottery.Domain;
 using Lottery.Infrastructure;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,6 +54,14 @@ foreach (var game in Enum.GetValues<Game>())
 app.UseCors(WebOrigins);
 app.UseRateLimiter();
 app.MapOpenApi();
+
+// Interactive API reference at /scalar, development only - the OpenAPI
+// document itself stays available everywhere, but a browsable UI is not
+// something a public production API needs to expose.
+if (app.Environment.IsDevelopment())
+{
+    app.MapScalarApiReference(options => options.WithTitle("LotteryApp API"));
+}
 app.MapHealthChecks("/healthz");
 app.MapLotteryEndpoints();
 
