@@ -56,6 +56,11 @@ src/app/
 - **History rows show the drawing's numbers** (not the ticket repeated), with
   the balls that appear on your ticket flashing; a "Show 10/25/50/100/All
   matches per ticket" selector slices the fully-loaded results client-side.
+- **A colour legend sits above the results**, not below them: the balls carry
+  meaning in colour alone, so the key that decodes them has to be on screen
+  before the first row that uses it. The swatches reuse the ball styling and
+  the same 1s pulse, and the special-ball label follows the game ("the
+  Powerball" / "the Mega Ball").
 
 ## Responsive layout ([D23](../docs/REQUIREMENTS-AND-DECISIONS.md))
 
@@ -141,7 +146,7 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-40 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+45 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 count clamping, per-ticket validation naming the offending ticket,
 checkbox-selection semantics - all-complete-tickets checked, view-filter
