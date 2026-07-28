@@ -533,3 +533,29 @@ binary in a directory that obviously existed.
   absent, and a platform that restarts on exit. No local run had all three.
   When production differs structurally from dev, enumerate the differences and
   test each one deliberately.
+
+### Postscript: the recovery took two minutes, and I proposed thirteen hours
+
+Having established that the quota was drained, the plan was to **wait until
+midnight UTC** for the daily reset - a 13-hour pause - and I began setting up
+a scheduled deployment to fire afterwards. The user asked whether deleting the
+resource group and redeploying would bypass the quota instead. It does: the
+allowance is per App Service plan, so a new plan starts fresh. Dropping just
+the app and plan and re-running the idempotent provisioning script took about
+two minutes and cost nothing.
+
+**The reasoning failure is worth more than the technique.** I had already
+proved the quota was per-plan minutes earlier - that was my own evidence for
+why the other two free apps were unaffected. Having established that the
+constraint was scoped to a resource I could recreate for free, I never asked
+the obvious follow-up: *then why wait for it to reset?* I treated an
+environmental limit as immovable because it arrived labelled "daily quota",
+and started engineering around the delay instead of removing it.
+
+**The generalizable rule:** when you diagnose the *scope* of a constraint,
+immediately ask what that scope implies. A limit attached to a resource you
+own, can destroy, and can recreate for free is not a limit - it is a state you
+are choosing to keep. Before scheduling work around a wait, check whether the
+thing being waited on can simply be replaced. And when someone proposes a
+faster path, test it against the evidence you already have rather than the
+plan you already made.

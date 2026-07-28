@@ -215,7 +215,30 @@ from its own infrastructure - the app never sees the request. Check with:
 az webapp show --name <api-app-name> --resource-group rg-lottery   --query "{state:state, usage:usageState}" -o tsv
 ```
 
-`QuotaExceeded` resets daily at midnight UTC. Restart counts, which reveal a
+`QuotaExceeded` resets daily at midnight UTC - **but waiting is rarely the
+right answer.** The F1 CPU allowance is tracked **per App Service plan**, not
+per subscription or region (proven here: two other free apps on their own
+plans were unaffected while this one was disabled). So a plan that has been
+drained by a bug can simply be replaced:
+
+```bash
+# surgical: drop only the app and its plan, keeping the Static Web App so its
+# deployment token - and therefore the GitHub secret - stays valid
+az webapp delete --name <api-app-name> --resource-group rg-lottery
+az appservice plan delete --name asp-lottery --resource-group rg-lottery --yes
+
+# the provisioning script is idempotent: it recreates both and leaves the
+# app registration, federated credentials and SWA untouched
+./scripts/provision-azure.ps1
+```
+
+Total time: about two minutes, cost $0, and the new plan starts with a full
+60-minute allowance. Do this only after fixing whatever drained the quota -
+otherwise the replacement plan burns down the same way.
+
+One wrinkle to expect: for a minute or so after recreation the hostname may
+still resolve to the old front-end and return Azure's **404 "Web Site not
+found"** page. Retry before concluding anything is wrong. Restart counts, which reveal a
 loop immediately, come from the site's `usages` endpoint as `WPStopRequests`.
 
 ## Guarding against accidents
