@@ -58,5 +58,6 @@ browsable UI is not something a public production API needs to expose.
 
 `appsettings.json` holds the non-secret baseline (`Database:Provider: Sqlite`);
 `appsettings.Development.json` (committed - SQLite path and log levels only)
-covers local dev. Production values arrive from environment/Key Vault - never
+covers local dev. Production values arrive from App Service application
+settings (optionally Key Vault references) - never
 from a committed file. There are no secrets in this project by design.

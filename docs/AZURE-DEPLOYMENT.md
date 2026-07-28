@@ -63,7 +63,46 @@ F1 cannot keep a process resident. This was already anticipated
 drawing, and the refresh cycle is self-healing on startup regardless. The
 free tier makes that workflow load-bearing rather than an optimisation.
 
-## Secrets: there are none to store
+## The one optional secret: the Socrata feed token
+
+The app needs no token - it only raises NY Open Data rate limits, and this
+app's traffic sits far below the anonymous ceiling. If you have one
+([how to obtain it](DATA-SOURCES.md#where-to-get-one)), the script gives it a
+real production home:
+
+```powershell
+# default: App Service application setting
+./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString)
+
+# opt-in: Key Vault, with the app setting holding only a reference
+./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString) -WithKeyVault
+```
+
+**Default (application setting).** The value lives in the App Service's own
+configuration store - encrypted at rest, outside source control, readable only
+with RBAC access to the app. Azure injects it as the environment variable
+`Feeds__SocrataAppToken`, which .NET reads as the config key
+`Feeds:SocrataAppToken` (a double underscore stands in for the colon, since
+environment variables cannot contain one). No extra resources, no cost.
+
+**`-WithKeyVault`.** Provisions a Key Vault with RBAC authorization, grants the
+app's managed identity the *Key Vault Secrets User* role (read-only), stores
+the secret, and sets the app setting to `@Microsoft.KeyVault(SecretUri=...)`.
+App Service resolves that reference at startup using the managed identity, so
+the token never appears in configuration and gains rotation and audit logging.
+
+Which to choose: this architecture does not *need* Key Vault - Managed Identity
+and OIDC already eliminate every other secret, so a vault here holds exactly
+one optional rate-limit token. The switch exists because it is the textbook
+pattern and worth demonstrating; the cost is fractions of a cent per month at
+this volume. The application code is identical either way, which is the point:
+storage is a deployment decision, not a code decision.
+
+Handling: the script takes the token as a **SecureString**, converts it at the
+last possible moment, clears it from memory immediately, and never writes it to
+a file or prints it. No token value appears anywhere in this repository.
+
+## Secrets: there are none you must store
 
 The whole pipeline runs without a stored credential:
 

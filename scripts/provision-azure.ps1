@@ -38,6 +38,19 @@
     Sqlite (default, $0) or AzureSql (uses the free serverless offer - one per
     subscription; the script fails clearly if that offer is unavailable).
 
+.PARAMETER SocrataToken
+    Optional NY Open Data app token (raises feed rate limits; the app works
+    without one). Stored as an App Service application setting - encrypted at
+    rest, never written to a file, never printed. With -WithKeyVault it is
+    stored in Key Vault instead and the app setting holds only a reference.
+
+.PARAMETER WithKeyVault
+    Provision a Key Vault, grant the app's managed identity read access, and
+    keep -SocrataToken there rather than directly in an app setting. Not
+    required by this architecture - Managed Identity and OIDC already remove
+    every other secret - but it is the textbook pattern and costs a fraction
+    of a cent at this volume.
+
 .PARAMETER WhatIf
     Print the plan without creating anything.
 
@@ -45,13 +58,21 @@
     ./scripts/provision-azure.ps1 -WhatIf
     ./scripts/provision-azure.ps1
     ./scripts/provision-azure.ps1 -Database AzureSql
+    ./scripts/provision-azure.ps1 -SocrataToken (Read-Host -AsSecureString)
+    ./scripts/provision-azure.ps1 -SocrataToken $token -WithKeyVault
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [string]$Name = "lottery",
     [string]$Location,
     [ValidateSet("Sqlite", "AzureSql")]
-    [string]$Database = "Sqlite"
+    [string]$Database = "Sqlite",
+
+    # SecureString so the value never sits in the shell's command history or
+    # in a plain variable that could be echoed by accident.
+    [System.Security.SecureString]$SocrataToken,
+
+    [switch]$WithKeyVault
 )
 
 $ErrorActionPreference = "Stop"
@@ -125,6 +146,11 @@ $planName      = "asp-$Name"
 $apiName       = "app-$Name-$suffix"      # globally unique
 $swaName       = "swa-$Name-$suffix"      # globally unique
 $identityName  = "id-github-$Name"
+$vaultName     = "kv-$Name-$suffix"       # globally unique
+
+if ($WithKeyVault -and -not $SocrataToken) {
+    Write-Warning "-WithKeyVault was given without -SocrataToken: a vault will be created with nothing in it."
+}
 
 Write-Info "Resource group : $resourceGroup"
 Write-Info "App Service    : $apiName (F1 free)"
@@ -218,6 +244,75 @@ if ($Database -eq "Sqlite") {
     Invoke-Az webapp config appsettings set --name $apiName --resource-group $resourceGroup `
         --settings "Database__Provider=SqlServer" "ConnectionStrings__Default=$connection" | Out-Null
     Write-Ok "connection string set (Managed Identity - contains no password)"
+}
+
+# ------------------------------------------------------- Socrata feed token
+# Optional: raises NY Open Data rate limits. The app runs fine without it, so
+# this whole block is skipped unless a token was supplied.
+if ($SocrataToken) {
+    Write-Step "Socrata feed token"
+
+    # Converted at the last possible moment and cleared immediately after.
+    $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR(
+        [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SocrataToken))
+    try {
+        if ($WithKeyVault) {
+            # Key Vault path: the app setting holds a REFERENCE, not the value.
+            # App Service resolves it at startup using the managed identity, so
+            # the token is never visible in configuration and gains rotation
+            # and audit logging. Not required by this architecture - it is the
+            # textbook pattern, demonstrated here on an opt-in switch.
+            if (-not (Test-AzResource keyvault show --name $vaultName --resource-group $resourceGroup)) {
+                Invoke-Az keyvault create --name $vaultName --resource-group $resourceGroup `
+                    --location $Location --enable-rbac-authorization true | Out-Null
+                Write-Ok "created key vault $vaultName (RBAC authorization)"
+            } else {
+                Write-Ok "key vault $vaultName already exists"
+            }
+
+            # The identity running this script needs write access to store the
+            # secret; the app's managed identity needs only read.
+            $me = Invoke-Az ad signed-in-user show --query id
+            $vaultScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.KeyVault/vaults/$vaultName"
+            Invoke-Az role assignment create --assignee-object-id $me --assignee-principal-type User `
+                --role "Key Vault Secrets Officer" --scope $vaultScope 2>$null | Out-Null
+
+            $principalId = Invoke-Az webapp identity show --name $apiName --resource-group $resourceGroup --query principalId
+            Invoke-Az role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal `
+                --role "Key Vault Secrets User" --scope $vaultScope 2>$null | Out-Null
+            Write-Ok "app's managed identity granted read-only access"
+
+            # RBAC propagation is eventually consistent; retry briefly.
+            $secretId = $null
+            foreach ($attempt in 1..6) {
+                try {
+                    $secretId = Invoke-Az keyvault secret set --vault-name $vaultName `
+                        --name "Feeds--SocrataAppToken" --value $plainToken --query id
+                    break
+                } catch {
+                    if ($attempt -eq 6) { throw }
+                    Start-Sleep -Seconds 10
+                }
+            }
+            Write-Ok "secret stored in the vault"
+
+            Invoke-Az webapp config appsettings set --name $apiName --resource-group $resourceGroup `
+                --settings "Feeds__SocrataAppToken=@Microsoft.KeyVault(SecretUri=$secretId)" | Out-Null
+            Write-Ok "app setting points at the vault - the value itself is not in configuration"
+        } else {
+            # Default path: the value lives in the App Service's own
+            # configuration store, encrypted at rest and readable only with
+            # RBAC access to the app. Never in source, never in a file.
+            Invoke-Az webapp config appsettings set --name $apiName --resource-group $resourceGroup `
+                --settings "Feeds__SocrataAppToken=$plainToken" | Out-Null
+            Write-Ok "stored as an App Service application setting (encrypted at rest)"
+            Write-Info "use -WithKeyVault to keep it in Key Vault instead"
+        }
+    } finally {
+        # Do not leave the plaintext in the session.
+        Remove-Variable plainToken -ErrorAction SilentlyContinue
+        [System.GC]::Collect()
+    }
 }
 
 # ------------------------------------------------------------ static web app
@@ -331,8 +426,9 @@ Write-Host @"
   API   $apiUrl
   Web   $swaUrl
   Group $resourceGroup  (delete everything: az group delete --name $resourceGroup)
+$(if ($SocrataToken) { if ($WithKeyVault) { "  Token Key Vault $vaultName, referenced by an app setting" } else { "  Token App Service application setting (encrypted at rest)" } })
 
-  Cost: `$0 - F1 App Service, Free Static Web App$(if ($Database -eq 'Sqlite') { ', SQLite on /home' } else { ', Azure SQL free offer' })
+  Cost: `$0 - F1 App Service, Free Static Web App$(if ($Database -eq 'Sqlite') { ', SQLite on /home' } else { ', Azure SQL free offer' })$(if ($WithKeyVault) { ', Key Vault (fractions of a cent per month at this volume)' })
 
   Next:
     1. Uncomment the push triggers in .github/workflows/deploy-api.yml (main)
