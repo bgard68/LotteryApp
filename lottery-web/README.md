@@ -141,12 +141,15 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-30 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+40 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 count clamping, per-ticket validation naming the offending ticket,
 checkbox-selection semantics - all-complete-tickets checked, view-filter
 toggling keeps results, no-selection disables checking - page-size behaviour,
-and rate-limited/unreachable/generic error messaging), and App shell specs
+and rate-limited/unreachable/generic error messaging, plus the **big-win
+threshold** at its boundaries - 3 whites plus the special qualifies, 2 plus
+the special does not, 5 whites without the special does not, unchecked
+tickets still count, and an edit clears the list), and App shell specs
 covering **both layouts** against a `FakeViewport`: desktop renders everything
 with no tab bar; phone starts on Games, swaps to the checker on Check, jumps
 to Wins when results arrive, and returns to the single page when the viewport
