@@ -1,4 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <!-- Points at %APPDATA%\Microsoft\UserSecrets\<id>\secrets.json - OUTSIDE
+         the repository. The id itself is just a folder name, not a secret;
+         without it `dotnet user-secrets set` cannot run at all. -->
+    <UserSecretsId>523020fd-f9ff-4a74-b60e-73324a072c44</UserSecretsId>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Lottery.Infrastructure\Lottery.Infrastructure.csproj" />
   </ItemGroup>
