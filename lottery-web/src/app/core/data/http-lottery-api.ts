@@ -1,4 +1,4 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type { Game } from '../domain/game';
@@ -26,28 +26,32 @@ export class HttpLotteryApi extends LotteryApi {
   private readonly base = inject(API_BASE_URL);
 
   override nextDraw(game: Game): Promise<NextDrawDto> {
-    return this.get<NextDrawDto>(`/api/${game}/next-draw`);
+    return this.get<NextDrawDto>(`/api/${segment(game)}/next-draw`);
   }
 
   override latest(game: Game): Promise<LatestDrawDto> {
-    return this.get<LatestDrawDto>(`/api/${game}/latest`);
+    return this.get<LatestDrawDto>(`/api/${segment(game)}/latest`);
   }
 
   override ruleEras(game: Game): Promise<RuleEraDto[]> {
-    return this.get<RuleEraDto[]>(`/api/${game}/rule-eras`);
+    return this.get<RuleEraDto[]>(`/api/${segment(game)}/rule-eras`);
   }
 
   override generate(game: Game, count: number): Promise<GeneratedPicksDto> {
-    return this.get<GeneratedPicksDto>(`/api/${game}/generate?count=${count}`);
+    return this.get<GeneratedPicksDto>(
+      `/api/${segment(game)}/generate`,
+      new HttpParams().set('count', count));
   }
 
   override check(game: Game, whites: number[], special: number): Promise<CheckResultDto> {
-    return this.get<CheckResultDto>(`/api/${game}/check?whites=${whites.join(',')}&special=${special}`);
+    return this.get<CheckResultDto>(
+      `/api/${segment(game)}/check`,
+      new HttpParams().set('whites', whites.join(',')).set('special', special));
   }
 
-  private async get<T>(path: string): Promise<T> {
+  private async get<T>(path: string, params?: HttpParams): Promise<T> {
     try {
-      return await firstValueFrom(this.http.get<T>(`${this.base}${path}`));
+      return await firstValueFrom(this.http.get<T>(`${this.base}${path}`, { params }));
     } catch (e) {
       if (e instanceof HttpErrorResponse && e.status === 429)
         throw new RateLimitedError();
@@ -56,6 +60,21 @@ export class HttpLotteryApi extends LotteryApi {
       throw e;
     }
   }
+}
+
+/**
+ * The game is the only path segment built from a value that reaches this layer
+ * through a DOM escape hatch - the checker reads it via `$any($event.target)`,
+ * which TypeScript cannot police. Today the <select> options constrain it, but
+ * nothing at RUNTIME does, and a path segment is the one place where an
+ * unencoded value can change which endpoint is called rather than merely what
+ * is asked of it.
+ *
+ * Query values go through HttpParams for the same reason: encoding by
+ * construction beats remembering to encode.
+ */
+function segment(value: string): string {
+  return encodeURIComponent(value);
 }
 
 /**
