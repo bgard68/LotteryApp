@@ -102,6 +102,11 @@ malicious owner.
 
 Dependabot opens PRs; merging them is a judgment call, not a formality:
 
+0. **NuGet updates must regenerate the lock files.** Dependabot updates
+   `Directory.Packages.props` only; run `dotnet restore --force-evaluate` on
+   the PR branch and commit the `packages.lock.json` changes, or CI's
+   locked-mode restore fails with `NU1004`
+   ([lesson 20](LESSONS-LEARNED.md#20-dependabot-prs-failed-locked-mode-restore)).
 1. **Never merge on stale checks.** PRs opened before a CI workflow existed
    carry only the checks that existed then. Rebase (`@dependabot rebase`) so
    the current gates actually run before trusting a green tick - and remember
@@ -117,6 +122,25 @@ Dependabot opens PRs; merging them is a judgment call, not a formality:
    vulnerability, and `Microsoft.AspNetCore.OpenApi` 10.0.0 targets the 2.x
    line. Taking 3.x risks breaking the OpenAPI document, and with it the
    generated TypeScript client and its drift check.
+5. **Framework majors are migrations, not bumps.** Angular majors require
+   `ng update`, which migrates source code alongside packages - per-package
+   PRs (e.g. `@angular/common` 20 -> 22 alone) cannot succeed even if all of
+   them merged, so they are closed in favour of a single deliberate migration
+   PR when the upgrade is chosen.
+
+### Triage of the initial backlog (2026-07-28)
+
+All 20 open dependency PRs were resolved when this policy was adopted:
+**10 merged** on genuinely green CI (the grouped NuGet minor/patch set, every
+GitHub Actions bump on both branches, and the npm patch group);
+**6 closed with recorded rationale** (the `Microsoft.OpenApi` pin per rule 4,
+four per-package Angular majors per rule 5, and one SqlClient PR superseded by
+the grouped update - its leftover `dbup-sqlserver` major will return as its
+own PR); and the `Microsoft.Data.SqlClient` 7.x major was **verified locally**
+(build + all 68 tests) against the `SqlConfigurableRetryFactory` wake-up path
+before any of it was trusted. The triage also surfaced lesson 20 above: the
+first NuGet PR through the new CI failed locked-mode restore, which is exactly
+the kind of latent gap a first real run exists to find.
 
 ## What is deliberately not done
 
