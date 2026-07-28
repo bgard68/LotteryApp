@@ -22,6 +22,13 @@ permissions:
   contents: read
   id-token: write # OIDC federation - GitHub proves its identity per run
 
+# Two merges in quick succession would otherwise race, and the older build can
+# win. Serialise instead of cancelling: a half-finished deploy is worse than a
+# queued one.
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

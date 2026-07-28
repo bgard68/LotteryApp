@@ -2,6 +2,11 @@
 
 109 tests across three projects, one per layer. Run with `dotnet test`.
 
+The PowerShell smoke test in [scripts](../scripts/README.md) adds **32 checks**
+against a real running API - every endpoint, the error conditions, the refresh
+guard in both directions, and five security-header assertions (one of which
+asserts the *absence* of the `Server` header).
+
 Back to the [main README](../../README.md).
 
 ## Lottery.Domain.Tests (24)
