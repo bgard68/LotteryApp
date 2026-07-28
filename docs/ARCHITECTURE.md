@@ -37,6 +37,37 @@ implementations to ports at startup. No endpoint calls an Infrastructure type.
 | `Lottery.Infrastructure` | Dapper repositories, connection factories, DbUp migrations, feed clients, snapshot seeding | Application, Domain |
 | `Lottery.Api` | Minimal API endpoints, DI wiring, health check, rate limiter, CORS | all of the above |
 
+## Security headers on every response
+
+```mermaid
+graph LR
+    R["request"] --> H["security headers<br/><i>set before anything<br/>can short-circuit</i>"]
+    H --> F["forwarded headers"]
+    F --> C["CORS"]
+    C --> L["rate limit"]
+    L --> E["endpoint"]
+```
+
+Placement is the whole point: the header middleware runs before CORS preflight,
+before the rate limiter's 429, and before the endpoints' 400s - so **error
+responses carry the headers too**, which is where they are most often missing.
+
+| Header | Value | Why |
+|---|---|---|
+| `X-Content-Type-Options` | `nosniff` | No MIME guessing |
+| `X-Frame-Options` | `DENY` | Nothing here belongs in a frame |
+| `Referrer-Policy` | `no-referrer` | An API has no referrer to leak |
+| `Cross-Origin-Resource-Policy` | `cross-origin` | The SWA origin must still fetch it |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` | JSON only - nothing should ever execute or embed |
+| `Strict-Transport-Security` | via `UseHsts` | Closes the first-request plaintext window |
+
+The CSP lockdown is **skipped in Development** because Scalar is a real HTML page
+that `'none'` would break. The Kestrel `Server` header is suppressed.
+
+Five smoke-test assertions pin all of this, including one that asserts the
+*absence* of `Server`. Headers are trivial to add and just as trivial to lose to
+a middleware reorder, so the deploy gate is what notices.
+
 ## What every request passes through
 
 ```mermaid

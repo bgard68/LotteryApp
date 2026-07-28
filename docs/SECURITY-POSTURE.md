@@ -336,6 +336,85 @@ whether it had been considered or missed. Now it is written down.
   was. **Lesson:** when a security control appears absent, confirm the
   environment before changing the code.
 
+### D11 - Frontend code review (the first pass covered config, not code)
+
+The initial review examined the frontend's *infrastructure* - headers, deploy
+concurrency, action pinning, npm advisories - but not its **code**. A second
+pass looked for DOM sinks and what actually ships in the bundle.
+
+**Clean, and verified rather than assumed:**
+
+| Check | Result |
+|---|---|
+| `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` | none |
+| `bypassSecurityTrust*`, `DomSanitizer` | none |
+| `eval`, `new Function` | none |
+| `localStorage`, `sessionStorage`, `document.cookie` | none - nothing persisted client-side |
+| `target="_blank"` without `rel` | none |
+| Source maps in the production bundle | none emitted (`sourceMap` is scoped to the `development` config) |
+| Secret-shaped strings in the shipped JS | none |
+| TypeScript strictness | `strict`, `strictTemplates`, `strictInjectionParameters`, `typeCheckHostBindings` all on |
+| Production dependencies | 8, all first-party Angular + rxjs + tslib, 0 advisories |
+
+There is no XSS surface because nothing bypasses Angular's default escaping -
+the app renders numbers and dates through interpolation only.
+
+**One finding: URLs built by string interpolation.**
+
+```ts
+`/api/${game}/check?whites=${whites.join(',')}&special=${special}`
+```
+
+The numbers are validated upstream. The **game** is not: it reaches the store
+through `store.setGame($any($event.target).value)`, and `$any` is a deliberate
+hole in type checking, so at runtime only the `<select>` options constrain it.
+A path segment is where that matters - unencoded, a crafted value changes
+*which* endpoint is called rather than what is asked of it.
+
+**Honest severity: low.** The exposure is the user's own browser and the server
+404s unknown games. Hygiene, not a live vulnerability.
+
+**Fix:** `encodeURIComponent` for path segments, `HttpParams` for query values -
+encoding by construction, because "remember to encode" is not a control.
+
+**Test:** `http-lottery-api.spec.ts` - the one place in the suite where mocking
+HTTP is correct, because this class exists to speak HTTP, so the request it
+builds *is* the behaviour under test. It pins the encoding with a game value
+that tries to traverse out of its segment, and covers the
+429 / unreachable / genuine-500 classification that had no direct test.
+Specs 45 -> 53.
+
+### Deployment status of these fixes
+
+| Fix | Merged | Live |
+|---|---|---|
+| D1 unused OIDC credential deleted | n/a (Azure) | **yes**, verified |
+| D2 Contributor -> Website Contributor | n/a (Azure) | **yes**, proven by a deploy |
+| D3 diagnostics enabled | n/a (Azure) | **yes**, config re-read |
+| D6 API security headers | yes | **yes**, all six verified on the live API |
+| D5 concurrency, D7 action pinning | yes | yes |
+| D4 frontend CSP + anti-framing | yes | **not yet** - see below |
+| D11 URL encoding | yes | **not yet** - same deploy |
+
+The frontend deploy failed three consecutive times on an **Azure-side** error:
+
+```
+Using 'staticwebapp.config.json' file for configuration information
+...
+We are currently experiencing problems communicating with our content server.
+Please try again later or file an issue if this behavior continues.
+```
+
+Azure accepted the config and then failed inside its own content service. The
+App Service deploy succeeded in the same window, so this is Static Web Apps
+specific rather than a credential or subscription problem. The live site
+continues to serve the previous build intact - a failed SWA upload leaves the
+existing version in place rather than a partial one.
+
+**Until it deploys, the site keeps Azure's defaults** (HSTS, `Referrer-Policy`,
+nosniff) and lacks the CSP. Re-run `deploy-web.yml` once the service recovers;
+no code change is needed.
+
 ## Dependency update policy
 
 Dependabot opens PRs; merging them is a judgment call, not a formality:
