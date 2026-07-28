@@ -85,6 +85,28 @@ in repository settings - so the documented reporting path did not work.
 **Fix:** enabled the setting. (The general lesson: a security policy that
 references a feature is a claim, and claims need verifying.)
 
+### F6 - Docs referenced Key Vault, which nothing provisioned
+
+**Why it happened:** the zero-secrets design (D14) named Key Vault as the
+production secret store, and five documents repeated it. The provisioning
+script never created one - correctly, as it turns out: Managed Identity removed
+the SQL password and OIDC removed the deploy credential, leaving only the
+*optional* Socrata token, so a vault would have been provisioned empty. The
+docs described an intention the implementation had outgrown.
+
+**Third instance of the same pattern** (see F3, F5): a control named in
+documentation but absent in reality. Here the implementation was right and the
+documentation was stale - the opposite direction to F3 and F5, and a reminder
+that drift runs both ways.
+
+**Fix:** the token now has a real home - an App Service application setting by
+default (encrypted at rest, injected as `Feeds__SocrataAppToken`), with
+`-WithKeyVault` provisioning a vault and switching that setting to a
+`@Microsoft.KeyVault(SecretUri=...)` reference resolved by the app's managed
+identity. Documentation across five files now describes what exists, with the
+Key Vault path presented as opt-in demonstration rather than a requirement.
+No token value appears in the repository or its documentation.
+
 ### F5 - The documented user-secrets path could not be executed
 
 **Why it happened:** the docs instruct developers to store the optional Socrata
