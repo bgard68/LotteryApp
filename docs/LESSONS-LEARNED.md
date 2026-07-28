@@ -441,3 +441,31 @@ so any flag that changes that graph - a RID, a target framework, a package
 addition - has to be declared in the project rather than passed ad hoc on one
 command. Otherwise the flag silently edits a committed file and the next
 locked restore rejects it.
+
+## 24. The provisioning script had never been run
+
+**Symptom:** the first real run of `provision-azure.ps1` died immediately at
+the resource-group existence check, and after that fix died again on
+`az webapp create`.
+
+**Cause, both times:** Windows PowerShell 5.1 wraps every stderr line from a
+native command in an ErrorRecord, and `$ErrorActionPreference = 'Stop'` makes
+those terminating. `az ... show` writes to stderr when a resource is absent -
+which is the *normal answer* for an existence check, not a failure - and
+`az webapp create` emits a harmless deprecation WARNING on stderr. Neither is
+an error; both killed the script.
+
+**Fix:** the az helpers drop to `'Continue'` for the duration of the call,
+judge success by `$LASTEXITCODE` alone, and filter ErrorRecords out before
+parsing JSON. An `Invoke-AzOptional` helper covers calls that legitimately
+fail when the resource already exists.
+
+**The real lesson is not about PowerShell.** This is the same failure as F3
+(a security policy pointing at a disabled feature) and F5 (a documented
+user-secrets command that could not run): **a script written, documented in
+detail, and never executed.** It was committed with confident prose about what
+it would do, and the first two things it actually did were crash. Having
+already written that lesson down twice did not prevent a third instance -
+which suggests the rule needs to be mechanical rather than remembered:
+anything executable ships only after it has been run, or it ships explicitly
+labelled as unverified.

@@ -82,21 +82,58 @@ function Write-Ok   { param([string]$Message) Write-Host "    $Message" -Foregro
 function Write-Info { param([string]$Message) Write-Host "    $Message" -ForegroundColor Gray }
 
 function Invoke-Az {
-    <# az with JSON output, converted, failing loudly. #>
+    <#
+        az with JSON output, converted, failing loudly on a non-zero exit.
+
+        Windows PowerShell 5.1 wraps every stderr line from a native command in
+        an ErrorRecord, and with $ErrorActionPreference = 'Stop' that makes a
+        harmless az WARNING fatal. So: drop to 'Continue' for the call, judge
+        success by $LASTEXITCODE alone, and keep only stdout for the JSON.
+    #>
     param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
-    $output = & az @Arguments --output json 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "az $($Arguments -join ' ') failed:`n$output"
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & az @Arguments --output json 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "az $($Arguments -join ' ') failed:`n$($output -join "`n")"
+        }
+        $json = ($output | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }) -join "`n"
+        if ([string]::IsNullOrWhiteSpace($json)) { return $null }
+        return $json | ConvertFrom-Json
+    } finally {
+        $ErrorActionPreference = $previous
     }
-    if ([string]::IsNullOrWhiteSpace($output)) { return $null }
-    return $output | ConvertFrom-Json
 }
 
 function Test-AzResource {
-    <# Existence check that treats "not found" as false rather than an error. #>
+    <#
+        Existence check that treats "not found" as false rather than an error.
+        $ErrorActionPreference = 'Stop' turns ANY native-command stderr output
+        into a terminating error, and `az ... show` writes to stderr when the
+        resource is absent - which is the normal answer here, not a failure.
+    #>
     param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
-    & az @Arguments --output none 2>$null
-    return ($LASTEXITCODE -eq 0)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & az @Arguments --output none 2>&1 | Out-Null
+        return ($LASTEXITCODE -eq 0)
+    } finally {
+        $ErrorActionPreference = $previous
+    }
+}
+
+function Invoke-AzOptional {
+    <# For calls that legitimately fail when the thing already exists. #>
+    param([Parameter(ValueFromRemainingArguments)][string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & az @Arguments --output none 2>&1 | Out-Null
+    } finally {
+        $ErrorActionPreference = $previous
+    }
 }
 
 # ---------------------------------------------------------------- preflight
@@ -236,9 +273,9 @@ if ($Database -eq "Sqlite") {
         Write-Ok "database $sqlDb already exists"
     }
 
-    Invoke-Az sql server firewall-rule create --name AllowAzureServices `
+    Invoke-AzOptional sql server firewall-rule create --name AllowAzureServices `
         --server $sqlServer --resource-group $resourceGroup `
-        --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0 2>$null | Out-Null
+        --start-ip-address 0.0.0.0 --end-ip-address 0.0.0.0
 
     $connection = "Server=tcp:$sqlServer.database.windows.net,1433;Database=$sqlDb;Authentication=Active Directory Default;Encrypt=True;"
     Invoke-Az webapp config appsettings set --name $apiName --resource-group $resourceGroup `
@@ -274,12 +311,12 @@ if ($SocrataToken) {
             # secret; the app's managed identity needs only read.
             $me = Invoke-Az ad signed-in-user show --query id
             $vaultScope = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.KeyVault/vaults/$vaultName"
-            Invoke-Az role assignment create --assignee-object-id $me --assignee-principal-type User `
-                --role "Key Vault Secrets Officer" --scope $vaultScope 2>$null | Out-Null
+            Invoke-AzOptional role assignment create --assignee-object-id $me --assignee-principal-type User `
+                --role "Key Vault Secrets Officer" --scope $vaultScope
 
             $principalId = Invoke-Az webapp identity show --name $apiName --resource-group $resourceGroup --query principalId
-            Invoke-Az role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal `
-                --role "Key Vault Secrets User" --scope $vaultScope 2>$null | Out-Null
+            Invoke-AzOptional role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal `
+                --role "Key Vault Secrets User" --scope $vaultScope
             Write-Ok "app's managed identity granted read-only access"
 
             # RBAC propagation is eventually consistent; retry briefly.
