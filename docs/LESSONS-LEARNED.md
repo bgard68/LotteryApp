@@ -1,7 +1,9 @@
 # Lessons learned
 
-Real problems encountered while building this project, with root causes and
-fixes - kept so the next phase (and the next project) doesn't repeat them.
+Every defect and near-miss encountered while building this project: **what
+caught it**, **why it happened**, **the fix applied**, and the generalizable
+lesson - kept so the next phase (and the next project) doesn't repeat them.
+A summary of which detector caught what is at the [end](#what-caught-what).
 
 Back to the [main README](../README.md).
 
@@ -218,3 +220,113 @@ here-string at the quotes.
 immune to every quoting rule.
 **Lesson:** for multi-line native-command input containing quotes in PS 5.1,
 pass a file, not an argument.
+
+## 15. The rate limit was tighter than normal use
+
+**Symptom (user-reported):** clicking "Generate picks" showed a generic
+"Something went wrong - try again" - while previously-loaded results still sat
+on screen, making it look self-contradictory. The API log showed
+`429 Too Many Requests`.
+
+**Cause:** the per-IP ceiling was 60 requests/minute. A 5-ticket check is 5
+API calls and a page load is ~5 more, so an actively clicking user crossed it
+in ordinary use. The frontend then lumped 429 into its generic catch, hiding
+which limit had been hit.
+
+**Fix:** default raised to 120/minute and made configurable
+(`RateLimit:PermitPerMinute`); the adapter now throws a typed
+`RateLimitedError` mapped to "Checking a little too fast - wait a few seconds
+and try again."
+**Lesson:** size a rate limit against the app's own busiest legitimate
+interaction (here: one click = N calls), not against a round number - and give
+every distinct failure mode its own message, or the limit becomes
+indistinguishable from a bug.
+
+## 16. History rows all rendered the same numbers
+
+**Symptom (user-reported):** every row of the check-history list showed an
+identical set of six numbers, making the results look broken.
+
+**Cause:** a display error - the match rows rendered *the user's ticket* with
+matching balls flashing, so all 72 rows repeated the same numbers. The backend
+was already returning each drawing's numbers
+(`drawnWhiteBalls`/`drawnSpecial`); the template simply bound the wrong source.
+
+**Fix:** rows now render the drawing's winning numbers with the balls that
+appear on the user's ticket flashing, and the hint text states that convention
+explicitly.
+**Lesson:** when a list renders the same data in every row, that is the bug -
+and it is invisible to unit tests, which is exactly why UI changes get looked
+at in a browser here rather than declared done.
+
+## 17. A threshold change flooded the "big wins" panel
+
+**Symptom (user-reported):** the big-win callout filled with a dozen $7
+prizes, losing all signal.
+
+**Cause:** I interpreted "3 or more numbers plus the Powerball" as *3 total
+matched numbers counting the special ball*, which admits `Match 2 + Powerball`.
+Across 1,971 drawings nearly every ticket has several of those.
+
+**Fix:** threshold restored to 3+ matching **white** balls AND the special
+ball ($100 tier and up), with the rule spelled out in the panel title.
+**Lesson:** when a requirement counts things, confirm *which* things before
+implementing - and sanity-check a threshold against the data volume it will
+face, because "rare" over 1,971 drawings is a very different bar than "rare"
+over one.
+
+## 18. The committed API client drifted from the backend contract
+
+**Symptom:** the new OpenAPI drift check failed on its very first CI run.
+
+**Cause:** the multi-ticket feature added a `count` query parameter to
+`/api/{game}/generate`, but the committed `schema.d.ts` was never regenerated -
+exactly the drift the check exists to prevent, already present before the check
+was written.
+
+**Fix:** regenerated from the live document and committed; the check now
+guards every push.
+**Lesson:** generated artifacts committed to a repo *will* go stale silently -
+a regenerate-and-diff CI step is the only thing that makes
+"generated from the contract" true rather than aspirational. Adding one to an
+existing repo usually finds drift immediately.
+
+## 19. The dev server served a stale bundle after a branch switch
+
+**Symptom:** browser verification showed old UI (once, an empty page) while
+tests passed and the code on disk was correct. Happened twice.
+
+**Cause:** `lottery-web/` exists only on the `frontend` branch. Switching to
+`main` while `ng serve` was running deleted the files under its watcher; the
+rebuild failed (`Cannot find tsconfig file`) and it kept serving the last good
+bundle.
+
+**Fix:** restart `ng serve` after any branch switch; stop dev servers before
+switching deliberately.
+**Lesson:** file-watching dev servers assume a stable working tree - branch
+switches violate that assumption silently, and the symptom (stale UI) looks
+like a code bug rather than a tooling one.
+
+## What caught what
+
+| Detector | Entries |
+|---|---|
+| Compiler / build gates (warnings-as-errors, NuGet audit, CPM) | 1, 2 |
+| Automated tests | 3, 6, 10 |
+| CI checks (OpenAPI drift) | 18 |
+| Live smoke test | 4 |
+| Pre-implementation probing | 8, 9 |
+| Self-review during implementation | 7, 11, 12 |
+| Browser verification | 19 |
+| Tooling errors surfaced immediately | 5, 14 |
+| User report | 13, 15, 16, 17 |
+
+Fifteen of nineteen were caught by automation or deliberate verification before
+a user saw them - the argument for keeping the gates strict, since
+warnings-as-errors, the real-instance smoke test, and the drift check each
+paid for themselves within days of existing. The four user-reported defects
+share a trait: **all were presentation or threshold decisions, not logic
+errors.** The domain code was correct every time; the mistake was in what got
+displayed (16), what got hidden (13), where a boundary was drawn (17), or how
+generous a limit was (15). That is precisely the class of defect unit tests
+cannot catch.
