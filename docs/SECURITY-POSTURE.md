@@ -85,6 +85,23 @@ in repository settings - so the documented reporting path did not work.
 **Fix:** enabled the setting. (The general lesson: a security policy that
 references a feature is a claim, and claims need verifying.)
 
+### F5 - The documented user-secrets path could not be executed
+
+**Why it happened:** the docs instruct developers to store the optional Socrata
+token with `dotnet user-secrets set` - the right mechanism, keeping the value
+in the user profile entirely outside the repository. But no `UserSecretsId` was
+ever added to `Lottery.Api.csproj`, and without it that command simply fails.
+The secure path was documented and never run.
+
+This is the same failure as F3, found later: **a security instruction is a
+claim, and an unexecuted claim is not a control.** Two instances of one pattern
+is what makes it a habit worth naming (lesson 21).
+
+**Fix:** `UserSecretsId` added to the project and the documented command
+verified end to end - it now succeeds, writes to the user profile, and leaves
+the working tree clean. The id itself is a folder name, not a secret, and is
+committed deliberately so the command works for anyone who clones.
+
 ### F4 - Neither branch was protected
 
 **Why it happened:** the repository was created and pushed to directly; branch
