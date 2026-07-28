@@ -41,6 +41,10 @@ src/app/
   [data sources](../docs/DATA-SOURCES.md)) simply omits the amount - the card
   never breaks.
 
+The full picture - what resolves before bootstrap, one interaction traced from
+click to API, why the single RxJS call lives where it does, and how signals
+drive rendering without a zone - is in **[ARCHITECTURE.md](ARCHITECTURE.md)**.
+
 ## Checker behaviour
 
 - **1-10 tickets** (count selector, clamped); Generate fills every row with
