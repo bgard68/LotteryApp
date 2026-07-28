@@ -131,6 +131,51 @@ button {
   padding-top: 0.7rem;
 }
 
+// The colour key, above the first row that uses it. The swatches deliberately
+// repeat number-balls' own styling (including the pulse), so the key looks and
+// moves like the thing it describes rather than being a generic dot.
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .swatch {
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 50%;
+    background: var(--ball-bg);
+    border: 1px solid var(--ball-border);
+    flex: none;
+
+    &.hit {
+      border-color: var(--hit-color);
+      box-shadow: 0 0 0 2px var(--hit-color);
+      animation: legend-flash 1s ease-in-out infinite;
+    }
+
+    &.special.pb { background: var(--pb-accent); border-color: var(--pb-accent); }
+    &.special.mm { background: var(--mm-accent); border-color: var(--mm-accent); }
+  }
+}
+
+@keyframes legend-flash {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legend .swatch.hit { animation: none; }
+}
+
 .big-wins {
   border: 2px solid var(--hit-color);
   border-radius: 10px;

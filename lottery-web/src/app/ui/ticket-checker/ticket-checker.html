@@ -99,6 +99,20 @@
   @if (showResults()) {
     @if (store.results(); as results) {
       <div class="results">
+        <!-- Above the rows, not below them: the colours need explaining the
+             first time you meet one, not after scrolling past a hundred. -->
+        <p class="legend">
+          Each row shows that drawing's winning numbers.
+          <span class="key">
+            <span class="swatch hit" aria-hidden="true"></span>
+            a number on your ticket
+          </span>
+          <span class="key">
+            <span class="swatch special" [class.pb]="accent() === 'pb'" [class.mm]="accent() === 'mm'" aria-hidden="true"></span>
+            the {{ specialName() }}
+          </span>
+        </p>
+
         @if (bigWins().length > 0) {
           <div class="big-wins" role="status">
             <p class="big-title">
@@ -172,7 +186,6 @@
           }
         }
         <p class="hint">
-          Each row shows that drawing's winning numbers; the flashing ones are on your ticket.
           Prize amounts are today's approximate tier values - historical winnings expire and
           cannot be claimed.
         </p>
