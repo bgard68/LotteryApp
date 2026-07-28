@@ -387,3 +387,33 @@ configuration still match?" Config needs the same verification cadence as
 code, precisely because it has no tests to fail on its behalf. And every
 documented security procedure should be **run once** before it is published -
 an instruction nobody has executed is a guess.
+
+## 22. .NET 9+ removed Swagger UI, so a fresh API has no docs page
+
+**Symptom:** running the API from Visual Studio opens the browser at
+`https://localhost:7012/` and shows **HTTP 404**. The expectation - formed by
+a decade of ASP.NET Core templates - is a Swagger page.
+
+**Cause:** two separate things, both correct behaviour:
+
+1. **The API has no route at `/`.** It serves `/api/{game}/...`, `/healthz`
+   and `/openapi/v1.json`; nothing was mapped to the root, and
+   `launchSettings.json` had `launchBrowser: true` with no `launchUrl`, so the
+   browser landed exactly where nothing exists.
+2. **There is no Swagger UI to land on.** .NET 9 removed Swashbuckle from the
+   web templates. The built-in replacement, `AddOpenApi()` / `MapOpenApi()`,
+   generates the OpenAPI *document* only - it ships no user interface at all.
+   This project chose the built-in generator deliberately (decision D1), which
+   also means it inherited the missing UI.
+
+**Fix:** map a root index that describes the API (games, endpoints, links to
+the document and health check) so the base URL is informative rather than a
+404, and add **Scalar** (`Scalar.AspNetCore`) for an interactive reference at
+`/scalar` in Development only - the document stays public, but a browsable UI
+is not something a production API needs to expose. `launchUrl` points there so
+Visual Studio opens something useful.
+**Lesson:** when a framework removes a batteries-included default, the gap is
+silent - nothing errors, you just get a 404 where a page used to be. Verify
+what the *base URL* of a service actually returns; it is the first thing any
+human hitting the service will see, and it is easy to never test because no
+automated check ever browses it.

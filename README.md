@@ -74,6 +74,19 @@ dotnet run --project src/Lottery.Api
 `{game}` = `powerball` or `megamillions`. `/check` is GET on purpose: it reads
 data and changes nothing, so it is cacheable and testable with a plain URL.
 
+### API documentation
+
+| URL | What |
+|---|---|
+| `/` | Index of the API - games, endpoints, and the links below |
+| `/scalar` | **Interactive API reference** (Development only) |
+| `/openapi/v1.json` | The OpenAPI document itself (all environments) |
+
+There is no Swagger UI, and that is not an omission: .NET 9 removed Swashbuckle
+from the templates, and the built-in `AddOpenApi()` generates the *document*
+with no interface. [Scalar](https://scalar.com) renders it instead - see
+[lesson 22](docs/LESSONS-LEARNED.md).
+
 ## Lottery number generation
 
 `RandomPickGenerator` uses a **partial Fisher-Yates shuffle** of the full ball

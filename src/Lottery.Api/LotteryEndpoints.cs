@@ -8,6 +8,26 @@ public static class LotteryEndpoints
 {
     public static void MapLotteryEndpoints(this WebApplication app)
     {
+        // Root index: hitting the API's base URL in a browser should explain
+        // what lives here rather than returning a bare 404.
+        app.MapGet("/", (IWebHostEnvironment env) => Results.Ok(new
+        {
+            name = "LotteryApp API",
+            games = Enum.GetValues<Game>().Select(g => g.ToString().ToLowerInvariant()),
+            docs = env.IsDevelopment() ? "/scalar" : null,
+            openApi = "/openapi/v1.json",
+            health = "/healthz",
+            endpoints = new[]
+            {
+                "/api/{game}/next-draw",
+                "/api/{game}/latest",
+                "/api/{game}/draws?from=&to=&limit=",
+                "/api/{game}/check?whites=1,2,3,4,5&special=6",
+                "/api/{game}/rule-eras",
+                "/api/{game}/generate?count=1",
+            },
+        })).ExcludeFromDescription();
+
         var api = app.MapGroup("/api/{game}");
 
         api.MapGet("/next-draw", async (string game, GetNextDraw useCase, CancellationToken ct) =>
