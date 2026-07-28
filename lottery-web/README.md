@@ -123,6 +123,24 @@ has no linked-backend proxy and the browser must call the App Service origin
 directly. One build artefact therefore deploys to any environment; see
 [docs/AZURE-DEPLOYMENT.md](../docs/AZURE-DEPLOYMENT.md).
 
+## URL construction
+
+The HTTP adapter encodes **by construction**: path segments through
+`encodeURIComponent`, query values through `HttpParams`. Nothing is pasted into
+a template string.
+
+The reason is narrow, because the obvious reading is that the types already
+prevent this. They do not: the game reaches the store via
+`store.setGame($any($event.target).value)`, and `$any` is a deliberate hole in
+type checking. At runtime the `<select>` options are the only thing constraining
+it. A path segment is where that matters - unencoded, a crafted value changes
+*which* endpoint is called rather than what is asked of it.
+
+The exposure is a user's own browser and the server 404s unknown games, so this
+is hygiene rather than a live vulnerability. Fixed by construction anyway,
+because "remember to encode" is not a control. `http-lottery-api.spec.ts` pins
+it with a game value that tries to traverse out of its segment.
+
 ## Dev
 
 ```bash
@@ -164,7 +182,7 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-45 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+53 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 count clamping, per-ticket validation naming the offending ticket,
 checkbox-selection semantics - all-complete-tickets checked, view-filter
