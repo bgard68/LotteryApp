@@ -62,17 +62,33 @@ D16). **No-op until the `API_BASE_URL` repo variable is set** - safe to have
 enabled before anything is deployed. Sends the optional `X-Refresh-Key`
 header from the `REFRESH_KEY` secret when configured.
 
-## Deploy skeletons (manual-only until Azure exists)
+## Deployments (live)
 
-| Workflow | Purpose |
-|---|---|
-| `deploy-api.yml` | Test -> publish -> **OIDC** login (no stored credential, decision D14) -> App Service deploy -> `smoke-test.ps1` against the live URL as the **deploy gate** (D17). Push trigger (path-filtered `src/**`) is committed but commented out until the App Service + federation exist |
-| `deploy-web.yml` | Specs -> deploy to Azure Static Web Apps (linked backend proxies `/api/*`, no CORS - D15). Lives on the `frontend` branch; push trigger (path-filtered `lottery-web/**`) commented out until the SWA exists |
+Both halves deploy automatically and independently - a backend change never
+redeploys the frontend, and vice versa (decision D15). Authentication is OIDC
+federation, so no deployment credential is stored anywhere (D14).
 
-Activation checklist when Azure is provisioned: set repo variables
-`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`,
-`API_APP_NAME`, `API_BASE_URL`, secret `AZURE_STATIC_WEB_APPS_API_TOKEN`
-(and optionally `REFRESH_KEY`), then uncomment both push triggers.
+| Workflow | Branch | Fires on | What it does |
+|---|---|---|---|
+| `deploy-api.yml` | `main` | `src/**`, `Directory.*.props`, `global.json`, the smoke test, or itself | Test -> publish (linux-x64, ~52 MB) -> OIDC login -> App Service deploy -> **`smoke-test.ps1` against the live URL as the gate** (D17) |
+| `deploy-web.yml` | `frontend` | `lottery-web/**` or itself | Install -> specs -> build -> write `config.json` from `API_BASE_URL` -> deploy to Static Web Apps |
+
+Both keep `workflow_dispatch` for manual runs.
+
+**The gate matters.** A failed smoke test fails the deployment run, so a broken
+deploy is known immediately rather than when a visitor finds it. It has already
+earned its place: it caught the API returning 503 across every endpoint when a
+missing directory sent the app into a restart loop
+([lesson 25](../LESSONS-LEARNED.md)).
+
+**Path filters are deliberate.** Documentation changes, decision records and
+lesson write-ups touch `main` constantly; none of them should redeploy a
+running API.
+
+**Configured by provisioning.** `./scripts/provision-azure.ps1` sets every
+variable these workflows read (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`, `API_APP_NAME`, `API_BASE_URL`) and the one secret
+(`AZURE_STATIC_WEB_APPS_API_TOKEN`). Re-running it is safe.
 
 ## Conventions
 
