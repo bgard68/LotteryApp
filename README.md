@@ -291,8 +291,9 @@ the approved design: [docs/REQUIREMENTS-AND-DECISIONS.md](docs/REQUIREMENTS-AND-
 
 ## Lessons learned
 
-Real bugs and problems hit while building, and their fixes:
-[docs/LESSONS-LEARNED.md](docs/LESSONS-LEARNED.md).
+Every defect and near-miss hit while building this - what caught it, why it
+happened, the fix, and the takeaway, plus a summary of which detector caught
+what: [docs/LESSONS-LEARNED.md](docs/LESSONS-LEARNED.md).
 
 ## Security
 
