@@ -36,8 +36,25 @@ src/app/
   (trust boundary - deliberate duplication, values still live in one place).
 - **Countdown self-heals**: when a countdown hits zero the store refetches, so
   the card flips to "Results pending" and later to the new numbers on its own.
-- **Jackpot nulls hide**: Powerball has no jackpot source (see
-  [data sources](../docs/DATA-SOURCES.md)) - the card simply omits the amount.
+- **Jackpot amounts degrade to hidden**: any missing jackpot value (see
+  [data sources](../docs/DATA-SOURCES.md)) simply omits the amount - the card
+  never breaks.
+
+## Checker behaviour
+
+- **1-10 tickets** (count selector, clamped); Generate fills every row with
+  era-valid picks from the API; all rows stay hand-editable.
+- **Checkboxes are a view filter**: with 2+ tickets each row gets a checkbox
+  (all checked by default) controlling which tickets' detailed match lists
+  display. "Check history" still checks **every complete ticket** behind the
+  scenes, so the big-wins panel always covers the whole set - including
+  unchecked tickets - and toggling a checkbox never discards results.
+- **Big wins** = 3 or more matching *white* balls plus the special ball (the
+  $100 tier and up). Qualifying wins surface in a highlighted panel with the
+  drawing's numbers and payout, and the winning ticket's row is highlighted.
+- **History rows show the drawing's numbers** (not the ticket repeated), with
+  the balls that appear on your ticket flashing; a "Show 10/25/50/100/All
+  matches per ticket" selector slices the fully-loaded results client-side.
 
 ## Dev
 
@@ -80,10 +97,12 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-19 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+25 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
-out-of-era/duplicate rejection, incomplete-ticket quiescence, check/generate
-through the port, unreachable-vs-generic error messaging), and an App shell
+count clamping, per-ticket validation naming the offending ticket,
+checkbox-selection semantics - all-complete-tickets checked, view-filter
+toggling keeps results, no-selection disables checking - page-size behaviour,
+and rate-limited/unreachable/generic error messaging), and an App shell
 render smoke test. No HTTP mocking anywhere - the port abstraction makes
 fakes trivial.
 
