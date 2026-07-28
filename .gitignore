@@ -155,3 +155,8 @@ main.json
 # it holds only the public API URL, but it is generated, not authored.
 lottery-web/src/assets/config.json
 lottery-web/public/config.json
+
+# Presentation assets (demo GIF / still) live on `main` only, embedded in its
+# README. Regenerating them while this branch is checked out would otherwise
+# leave an untracked demo/ folder sitting in `git status` forever.
+demo/
