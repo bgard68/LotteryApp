@@ -1,5 +1,10 @@
 version: 2
+
+# Dependabot reads this file from the DEFAULT branch only (main), so entries
+# covering the frontend branch must declare target-branch explicitly - without
+# it, lottery-web's npm tree would never be scanned (it does not exist on main).
 updates:
+  # ---------- main: the .NET API ----------
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
@@ -10,5 +15,25 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # ---------- frontend: the Angular app ----------
+  - package-ecosystem: "npm"
+    directory: "/lottery-web"
+    target-branch: "frontend"
+    schedule:
+      interval: "weekly"
+    groups:
+      # Angular ships its packages in lockstep; bumping them together avoids
+      # a broken half-upgraded state across a dozen separate PRs.
+      angular:
+        patterns: ["@angular/*", "@angular-devkit/*", "ng-packagr"]
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "frontend"
     schedule:
       interval: "weekly"

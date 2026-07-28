@@ -1,5 +1,8 @@
 name: CodeQL
 
+# C# analysis for the API. The Angular app lives on the frontend branch and is
+# analyzed by that branch's own CodeQL workflow (JavaScript/TypeScript) - the
+# branches are never merged, so each carries the analysis its code needs.
 on:
   push:
     branches: [main]
@@ -13,23 +16,32 @@ permissions:
 
 jobs:
   analyze:
-    name: Analyze (${{ matrix.language }})
+    name: Analyze (csharp)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       security-events: write
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [csharp]
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # build-mode: manual (was: none). Buildless C# analysis does not fully
+      # resolve dependencies, so dataflow through libraries - our Dapper SQL
+      # paths and the feed HTTP clients - is where it is weakest. A real build
+      # costs ~2 minutes and materially improves fidelity.
       - uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
-          build-mode: none
+          languages: csharp
+          build-mode: manual
+          queries: security-extended
+
+      - name: Build
+        run: dotnet build --no-incremental
 
       - uses: github/codeql-action/analyze@v3
         with:
-          category: "/language:${{ matrix.language }}"
+          category: "/language:csharp"
