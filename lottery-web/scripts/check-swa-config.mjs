@@ -7,6 +7,12 @@
  * a move of the file, would silently ship a site with no CSP and nothing else
  * in the suite would notice - the app would work perfectly.
  *
+ * It also scans the built index.html for inline event handlers. The CSP says
+ * script-src 'self', and Angular's inlineCritical optimization once emitted
+ * <link ... onload="..."> - blocked by the browser, so the full stylesheet
+ * silently stayed media="print". The build config disables that optimization;
+ * this check is what fails if it, or anything like it, comes back.
+ *
  * Usage: node scripts/check-swa-config.mjs [dir]   (default: the build output)
  */
 import { readFileSync } from 'node:fs';
@@ -53,10 +59,25 @@ if (!csp.includes('connect-src')) {
   failures.push('Content-Security-Policy has no connect-src - the app could not call its own API');
 }
 
+// The CSP forbids inline script, so shipped HTML must not contain any - an
+// inline handler is not "less secure", it is DEAD: the browser blocks it and
+// whatever it was meant to do silently never happens.
+const indexPath = join(dir, 'index.html');
+try {
+  const html = readFileSync(indexPath, 'utf8');
+  const handlers = html.match(/\son[a-z]+\s*=\s*["'][^"']*["']/gi) ?? [];
+  for (const h of handlers) failures.push(`index.html ships an inline handler the CSP will block: ${h.trim().slice(0, 60)}`);
+  if (/<script(?![^>]*\ssrc=)[^>]*>[^<]/i.test(html)) {
+    failures.push('index.html ships an inline <script> body the CSP will block');
+  }
+} catch (err) {
+  failures.push(`index.html missing or unreadable: ${err.message}`);
+}
+
 if (failures.length) {
-  console.error(`FAIL  ${path}`);
+  console.error(`FAIL  ${dir}`);
   for (const f of failures) console.error(`      - ${f}`);
   process.exit(1);
 }
 
-console.log(`PASS  ${path} - ${Object.keys(headers).length} security headers declared`);
+console.log(`PASS  ${dir} - ${Object.keys(headers).length} security headers declared, index.html free of inline script`);

@@ -113,6 +113,11 @@ than fail visibly:
   every request the app makes.
 - **`style-src` needs `'unsafe-inline'`.** Angular injects component styles as
   inline `<style>` elements; without it the page renders unstyled.
+- **`inlineCritical` is off.** Angular's critical-CSS optimization lazy-loads
+  the full stylesheet via an inline `onload` handler - which `script-src 'self'`
+  blocks, leaving the stylesheet stuck at `media="print"`. At a 767-byte
+  stylesheet the optimization buys nothing; `check:swa` fails the build if an
+  inline handler ever reappears in the shipped HTML.
 
 `npm run check:swa` asserts the headers survived, and CI runs it against the
 **built output** rather than the source. That is the failure this guards: the
