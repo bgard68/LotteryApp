@@ -315,7 +315,8 @@ reseeds on next start).
 ## Smoke test (PowerShell)
 
 [`scripts/smoke-test.ps1`](scripts/README.md) exercises **every endpoint,
-including error conditions** - 27 checks: happy paths for both games plus
+including error conditions** - 32 checks: happy paths for both games,
+security-header assertions, plus
 404 for unknown games and 400s for malformed tickets (too few numbers,
 duplicates, out-of-era values, non-numeric input). It runs three ways: locally
 against a dev server, in CI, and as the **post-deploy gate** - a failed smoke

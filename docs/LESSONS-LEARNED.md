@@ -766,3 +766,8 @@ a sibling service succeeded with the same credentials, the problem is not yours.
 Read the log for what was accepted before the failure, not just the red line at
 the bottom - a message that names the platform's own component and tells you to
 retry is describing itself, not you.
+
+**How it ended:** within the hour the control plane recovered first - the same
+ARM call that had been dropping connections began answering - and the deploy
+attempted immediately after succeeded. The recovering management plane was the
+tell that a retry had become worth one attempt; nothing on our side changed.
