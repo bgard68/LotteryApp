@@ -99,6 +99,16 @@ from the templates, and the built-in `AddOpenApi()` generates the *document*
 with no interface. [Scalar](https://scalar.com) renders it instead - see
 [lesson 22](docs/LESSONS-LEARNED.md).
 
+## Operating the running system
+
+Querying the production database (a SQLite **file** in the container, not a
+managed service - so there is no connection string), reading logs, forcing a
+data refresh, and rolling back: **[docs/OPERATIONS.md](docs/OPERATIONS.md)**.
+
+```powershell
+./scripts/query-db.ps1 "SELECT Game, COUNT(*) FROM Draws GROUP BY Game;"
+```
+
 ## Lottery number generation
 
 `RandomPickGenerator` uses a **partial Fisher-Yates shuffle** of the full ball
