@@ -259,3 +259,48 @@ fires. Real browsers and real phone rotations do fire both.
 which one is wrong before "fixing" anything - arm a counter on the event you
 depend on. The transition is covered by a spec driving `FakeViewport` instead,
 which is where that assertion belonged anyway.
+
+## 16. The CSP fought the framework's own optimization - and headers alone said everything was fine
+
+**Symptom:** after the CSP deployed, every header check passed, the site
+rendered, the API responded - and a real-browser pass still logged one
+violation:
+
+```
+Executing inline event handler violates the following Content Security Policy
+directive 'script-src 'self''.
+```
+
+**Cause:** Angular's production build inlines "critical" CSS and lazy-loads the
+full stylesheet with a trick:
+
+```html
+<link rel="stylesheet" href="styles-....css" media="print" onload="this.media='all'">
+```
+
+That `onload` is an inline event handler - exactly what `script-src 'self'`
+exists to block. Blocked, the flip to `media="all"` never runs, so the full
+stylesheet silently stays print-only. Nothing errors; the page just quietly
+serves only whatever the inliner considered critical.
+
+The absurdity making the fix easy: our stylesheet is **767 bytes**. Critical-CSS
+inlining is a first-paint optimization for large stylesheets; at this size it
+optimizes nothing and its only observable effect was the violation.
+
+**Fix:** `inlineCritical: false` in the production build config - the build now
+emits a plain render-blocking `<link>`, which for 767 bytes is the right call
+anyway.
+
+**Prevention, two layers:**
+- `check:swa` now also scans the **built index.html** for inline handlers and
+  inline `<script>` bodies, and fails the build if any appear. Verified in both
+  directions: the reinjected `onload` fails with a precise message.
+- The finding itself only surfaced because verification loaded the site in a
+  real browser and read the console. Headers said the policy was deployed;
+  only the browser could say the policy was *fighting the page*.
+
+**Lesson:** a CSP is not proven by its header being present - it is proven by
+the page running clean under it. Frameworks inject markup you did not write, so
+after deploying a policy, load the real site and read the console. And when an
+optimization exists for an asset class you do not have (767 bytes of CSS),
+turning it off is not a trade-off - it is deleting a liability.
