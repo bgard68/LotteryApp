@@ -393,10 +393,12 @@ Specs 45 -> 53.
 | D3 diagnostics enabled | n/a (Azure) | **yes**, config re-read |
 | D6 API security headers | yes | **yes**, all six verified on the live API |
 | D5 concurrency, D7 action pinning | yes | yes |
-| D4 frontend CSP + anti-framing | yes | **not yet** - see below |
-| D11 URL encoding | yes | **not yet** - same deploy |
+| D4 frontend CSP + anti-framing | yes | **yes** - verified, zero violations in-browser |
+| D11 URL encoding | yes | **yes** - same deploy |
 
-The frontend deploy failed three consecutive times on an **Azure-side** error:
+*(Status at time of writing - since resolved; the current state is the table
+below this section.)* The frontend deploy failed four times on an **Azure-side**
+error:
 
 ```
 Using 'staticwebapp.config.json' file for configuration information
@@ -411,9 +413,56 @@ specific rather than a credential or subscription problem. The live site
 continues to serve the previous build intact - a failed SWA upload leaves the
 existing version in place rather than a partial one.
 
-**Until it deploys, the site keeps Azure's defaults** (HSTS, `Referrer-Policy`,
-nosniff) and lacks the CSP. Re-run `deploy-web.yml` once the service recovers;
-no code change is needed.
+**Resolution:** the incident passed within the hour - the control plane
+recovered first (the same ARM call that had been dropping connections began
+answering), and the next deploy succeeded. Everything in the table above is now
+live. Lesson 29 records the diagnosis method.
+
+### D12 - The deployed CSP was fighting the framework's own markup
+
+Found only because verification loaded the deployed site in a **real browser**
+after the CSP landed - every header check passed, the site rendered, and the
+console still logged one violation:
+
+```
+Executing inline event handler violates the following Content Security Policy
+directive 'script-src 'self''.
+```
+
+**Analysis.** Angular's production build inlines "critical" CSS and lazy-loads
+the full stylesheet with a trick: emit
+`<link rel="stylesheet" media="print" onload="this.media='all'">`, so the
+stylesheet does not block first paint and an inline `onload` flips it to screen
+media once loaded. That handler is exactly what `script-src 'self'` exists to
+block. Blocked, the flip never runs - the full stylesheet **silently stays
+print-only**, and the page survives on whatever the inliner considered
+critical. Nothing errors, nothing looks broken; the policy and the framework
+were quietly fighting, and the framework was losing invisibly.
+
+The detail that decided the fix: the entire stylesheet is **767 bytes**.
+Critical-CSS inlining is a first-paint optimization for large stylesheets; at
+this size it optimizes nothing, and its only observable effect was the
+violation.
+
+**Fix:** `inlineCritical: false` in the production build configuration. The
+build emits a plain render-blocking `<link>` - at 767 bytes, the correct call
+with or without a CSP.
+
+**Tests that prevent recurrence:**
+- `check:swa` (runs in CI against the **built** `dist/`, not the source) now
+  also scans the shipped `index.html` for inline event handlers and inline
+  `<script>` bodies. Under this CSP an inline handler is not "less secure" -
+  it is dead code the browser will refuse to run, so its presence in the build
+  is a failure. Verified in both directions: the reinjected `onload` fails
+  with a precise message naming the attribute.
+- The post-deploy verification pattern itself: after any CSP change, load the
+  deployed site in a real browser and assert **zero** console violations.
+  Headers prove the policy is served; only the browser proves the page runs
+  clean under it. Re-run after the fix: `csp_violations=0`, and the stylesheet
+  confirmed active for screen media (a computed style sourced from it).
+
+Frontend lesson 16 is the narrative version, on the `frontend` branch.
+
 
 ## Dependency update policy
 
