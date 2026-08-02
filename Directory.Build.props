@@ -10,5 +10,22 @@
          files consistent for BOTH a plain restore and `publish -r linux-x64`;
          without it the two disagree and locked-mode restore fails NU1004. -->
     <RuntimeIdentifiers>linux-x64</RuntimeIdentifiers>
+
+    <!--
+      NuGet's own vulnerability audit, failing the restore rather than reporting.
+
+      The workflows scan this repository several ways - CodeQL over the source,
+      gitleaks over the history, a live smoke test against the running API - but
+      nothing looked at what the dependency tree drags in. `all` rather than the
+      default `direct`: a vulnerable package three levels down ships exactly the
+      same code as one named in a csproj.
+
+      NU1901-NU1904 are the four audit severities, named explicitly rather than
+      left to TreatWarningsAsErrors above, because restore-time NuGet warnings do
+      not reliably inherit it - and "probably fails" is not a gate.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 </Project>

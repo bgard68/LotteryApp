@@ -1,0 +1,138 @@
+name: Gate probes
+
+# Every gate in this repository shown something it must reject, and failed if it
+# does not. Green means one of two things — nothing is wrong, or the check is not
+# looking — and nothing else here tells those apart.
+#
+# Not hypothetical. In a sibling repository the container scan ran with exit-code 0
+# for its entire life: it reported CRITICAL and HIGH findings faithfully, blocked
+# nothing, and 28 of them accumulated behind a job that was passing. A check that
+# cannot fail looks exactly like a check with nothing to report.
+#
+# Each step inverts the usual sense: the probe passes when the tool exits non-zero.
+# Nothing touches the real solution — every probe builds a throwaway project in a
+# scratch directory.
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/gate-probes.yml'
+      - 'Directory.Build.props'
+  pull_request:
+    branches: [ main ]
+  schedule:
+    # Gates drift without anyone touching them: a tool updates, an upstream rule
+    # set changes, an allowlist grows. Weekly, against unchanged code.
+    - cron: '51 5 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-probes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probes:
+    name: Prove the gates can fail
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Probe - NuGet audit rejects a vulnerable package
+        run: |
+          set -uo pipefail
+          dir=$(mktemp -d)
+          # Without this file there is no audit configuration, NU1903 arrives as a
+          # plain warning, restore succeeds, and the probe reports a broken gate
+          # that is fine. A setup failure must never read as a gate failure.
+          cp Directory.Build.props "$dir/" || { echo "::error title=Probe setup failed::Directory.Build.props not found."; exit 1; }
+          {
+            echo '<Project Sdk="Microsoft.NET.Sdk">'
+            echo '  <PropertyGroup>'
+            echo '    <TargetFramework>net10.0</TargetFramework>'
+            echo '    <!-- This repository manages package versions centrally and restores'
+            echo '         with a lock file. A scratch project has neither, and a probe that'
+            echo '         trips over the plumbing proves nothing about the audit. -->'
+            echo '    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>'
+            echo '    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>'
+            echo '  </PropertyGroup>'
+            echo '  <ItemGroup>'
+            echo '    <PackageReference Include="System.Net.Http" Version="4.3.0" />'
+            echo '  </ItemGroup>'
+            echo '</Project>'
+          } > "$dir/probe.csproj"
+
+          if dotnet restore "$dir/probe.csproj" > "$dir/out.log" 2>&1; then
+            echo "::error title=Probe failed::NuGet audit accepted System.Net.Http 4.3.0, a known high-severity advisory."
+            tail -30 "$dir/out.log"; exit 1
+          fi
+          # Restore can fail for reasons unrelated to the audit, and a probe that
+          # accepts any failure proves nothing about the gate.
+          if ! grep -q "NU190" "$dir/out.log"; then
+            echo "::error title=Probe inconclusive::restore failed, but not on an audit warning."
+            tail -30 "$dir/out.log"; exit 1
+          fi
+          echo "ok  NuGet audit rejects a vulnerable package - caught, as it must be"
+
+      - name: Probe - the compiler rejects a warning
+        run: |
+          set -uo pipefail
+          dir=$(mktemp -d)
+          cp Directory.Build.props "$dir/" || { echo "::error title=Probe setup failed::Directory.Build.props not found."; exit 1; }
+          {
+            echo '<Project Sdk="Microsoft.NET.Sdk">'
+            echo '  <PropertyGroup>'
+            echo '    <TargetFramework>net10.0</TargetFramework>'
+            echo '    <OutputType>Exe</OutputType>'
+            echo '    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>'
+            echo '    <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>'
+            echo '  </PropertyGroup>'
+            echo '</Project>'
+          } > "$dir/probe.csproj"
+          # CS0219: assigned but never used. A warning, and so an error here.
+          echo 'class P { static void Main() { int unused = 1; } }' > "$dir/P.cs"
+
+          if dotnet build "$dir/probe.csproj" > "$dir/out.log" 2>&1; then
+            echo "::error title=Probe failed::A warning did not fail the build. TreatWarningsAsErrors is not in effect."
+            tail -30 "$dir/out.log"; exit 1
+          fi
+          if ! grep -q "CS0219" "$dir/out.log"; then
+            echo "::error title=Probe inconclusive::build failed, but not on the planted warning."
+            tail -30 "$dir/out.log"; exit 1
+          fi
+          echo "ok  the compiler rejects a warning - caught, as it must be"
+
+      - name: Probe - the test runner rejects a failing test
+        run: |
+          set -uo pipefail
+          dir=$(mktemp -d); cd "$dir"
+          dotnet new xunit -o probe > /dev/null 2>&1
+          {
+            echo 'public class ProbeTests'
+            echo '{'
+            echo '    [Xunit.Fact]'
+            echo '    public void The_gate_can_see_a_failing_test() => Xunit.Assert.Equal(1, 2);'
+            echo '}'
+          } > probe/UnitTest1.cs
+
+          if dotnet test probe > out.log 2>&1; then
+            echo "::error title=Probe failed::A failing test did not fail the runner."
+            tail -30 out.log; exit 1
+          fi
+          echo "ok  the test runner rejects a failing test - caught, as it must be"
+
+      - name: All probes caught what they must
+        run: echo "GATE PROBES PASSED - every gate rejected what it was shown."
