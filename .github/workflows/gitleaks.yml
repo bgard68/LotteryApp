@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
 
       - name: Scan
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         # Pinned to a commit, not a moving tag: third-party code running on
         # every push and PR, and @v2 can be repointed at any time.
         env:
