@@ -1,0 +1,49 @@
+name: Dependency review
+
+# Refuses a pull request that ADDS a vulnerable dependency.
+#
+# This sits upstream of the audit that already runs in the build. That one asks
+# "is anything in the tree vulnerable today?", which is the right question but
+# only after the change has landed — and by then the bad version is on the
+# branch and someone has to decide whether to revert or rush a fix.
+#
+# This one asks "does this pull request introduce one?", and answers before the
+# merge button is available. It compares the dependency manifests of the base
+# and the head, so it only ever complains about what the change itself brings
+# in — an advisory that was already there is not this job's business.
+#
+# Free on public repositories, and needs the dependency graph, which is on.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Review the dependencies this pull request adds
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Moderate rather than high: the existing package audits already fail
+          # the build at that level, and a gate that is laxer than the one after
+          # it would let something through only to have the next step reject it.
+          fail-on-severity: moderate
+          # A dependency whose licence changed is worth seeing in the diff even
+          # though it does not fail the job — two libraries here have already
+          # moved to commercial terms in a major version.
+          comment-summary-in-pr: on-failure
