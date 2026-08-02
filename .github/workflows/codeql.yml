@@ -25,6 +25,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Nothing here pushes, so the job token has no use after the clone.
+          persist-credentials: false
 
       # build-mode none is correct for JS/TS: CodeQL analyzes the sources
       # directly, no compilation step is involved.
