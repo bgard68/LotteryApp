@@ -27,6 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          # Nothing here pushes, so the job token has no use after the clone.
+          persist-credentials: false
           # Full history: the scheduled run re-validates every commit ever
           # made, not just the current diff.
           fetch-depth: 0
