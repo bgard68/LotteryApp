@@ -311,7 +311,7 @@
           "Microsoft.Extensions.Http.Resilience": "[10.8.0, )",
           "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
           "dbup-sqlite": "[6.0.4, )",
-          "dbup-sqlserver": "[6.0.16, )"
+          "dbup-sqlserver": "[7.2.0, )"
         }
       },
       "Dapper": {
