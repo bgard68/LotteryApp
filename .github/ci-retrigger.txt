@@ -1,1 +1,2 @@
 retrigger
+retrigger CI for PR #85 (dbup-sqlserver 7.2.0)
