@@ -6,5 +6,22 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+
+    <!--
+      Kept in step with main's copy. This branch carries src/Lottery.Api too -
+      its CI restores, builds and tests the backend - so without these a
+      package with a published advisory restored silently here, while the same
+      change against main was rejected.
+
+      `all` rather than the default `direct`: a vulnerable package three levels
+      down ships exactly the same code as one named in a csproj.
+
+      NU1901-NU1904 are the four audit severities, named explicitly rather than
+      left to TreatWarningsAsErrors above, because restore-time NuGet warnings
+      do not reliably inherit it - and "probably fails" is not a gate.
+    -->
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsAsErrors>
   </PropertyGroup>
 </Project>

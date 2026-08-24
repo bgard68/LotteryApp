@@ -1,14 +1,11 @@
+# Intentionally empty.
+#
+# Dependabot reads its configuration from the DEFAULT branch only (main), so
+# nothing in this file was ever evaluated. It previously declared a `nuget`
+# ecosystem, which read like NuGet coverage for this branch - there was none,
+# and a file that looks like a control without being one is worse than no file.
+#
+# This branch's coverage is declared on main using `target-branch: frontend`.
+# See .github/dependabot.yml there.
 version: 2
-updates:
-  - package-ecosystem: "nuget"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      nuget-minor-patch:
-        update-types: ["minor", "patch"]
-
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
+updates: []
