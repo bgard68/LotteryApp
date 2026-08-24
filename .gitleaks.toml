@@ -18,12 +18,20 @@ useDefault = true # all upstream rules: cloud keys, tokens, private keys, etc.
 description = "Known-safe matches - documentation and code that DESCRIBES credentials without containing one"
 
 paths = [
-  # Lock files are generated hashes, not secrets.
+  # NuGet lock files hold SHA-512 content hashes and nothing else - there is
+  # no credential shape in the format. npm's package-lock.json is deliberately
+  # NOT here: it stores fully-resolved registry URLs, and against a private or
+  # proxied registry those carry inline credentials
+  # (https://user:token@registry/...). Allowlisting the path would switch
+  # every rule off for the one file most likely to leak one.
   '''packages\.lock\.json$''',
-  '''package-lock\.json$''',
 ]
 
 regexes = [
+  # npm integrity hashes - base64 blobs that trip the generic entropy rules.
+  # Scoped to the hash itself rather than the whole file, so a resolved URL
+  # carrying credentials in the same lock file still matches.
+  '''"integrity":\s*"sha(256|512)-[A-Za-z0-9+/=]+"''',
   # Connection-string SHAPES in docs and code. These are templates and
   # comments, never values: the architecture uses Managed Identity, so a
   # production connection string contains no password at all.

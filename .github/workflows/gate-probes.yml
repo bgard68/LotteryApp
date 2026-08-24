@@ -119,7 +119,12 @@ jobs:
         run: |
           set -uo pipefail
           dir=$(mktemp -d); cd "$dir"
-          dotnet new xunit -o probe > /dev/null 2>&1
+          # Guarded like the probes above: if the template fails to scaffold,
+          # `dotnet test probe` fails because there is no project, the `if`
+          # below is false, and the step falls through to the success echo -
+          # reporting the gate as healthy on a setup failure.
+          dotnet new xunit -o probe > setup.log 2>&1 \
+            || { echo "::error title=Probe setup failed::dotnet new xunit failed."; tail -30 setup.log; exit 1; }
           {
             echo 'public class ProbeTests'
             echo '{'
@@ -130,6 +135,13 @@ jobs:
 
           if dotnet test probe > out.log 2>&1; then
             echo "::error title=Probe failed::A failing test did not fail the runner."
+            tail -30 out.log; exit 1
+          fi
+          # As with the other two probes: the runner can fail to restore or
+          # build, and a probe that accepts any failure proves nothing about
+          # the gate it is meant to be testing.
+          if ! grep -qE "Assert\.Equal\(\) Failure|Failed!" out.log; then
+            echo "::error title=Probe inconclusive::dotnet test failed, but not on the planted assertion."
             tail -30 out.log; exit 1
           fi
           echo "ok  the test runner rejects a failing test - caught, as it must be"

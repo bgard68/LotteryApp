@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Coverage settings, shared by `dotnet test settings coverlet.runsettings`.
+
+  The point of a coverage number is to answer "how much of OUR code is
+  exercised". Two things otherwise drown that signal out.
+
+  The OpenAPI source generator emits several thousand lines of XML comment
+  plumbing into Lottery.Api. It is Microsoft's code, it is regenerated on
+  every build, and nothing we write can cover it. Left in, it alone drags the
+  API layer's figure down by roughly forty points.
+
+  A test assembly covering itself is circular, so it is excluded too.
+
+  ExcludeByAttribute catches generated code that is attributed as such, which
+  is the general rule; the explicit Exclude filter catches the OpenAPI
+  generator's output, which lands in our own assembly's namespace.
+-->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <Exclude>[*]Microsoft.AspNetCore.OpenApi.Generated.*,[*]System.Runtime.CompilerServices.*</Exclude>
+          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
+          <ExcludeByFile>**/Migrations/**</ExcludeByFile>
+          <IncludeTestAssembly>false</IncludeTestAssembly>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>
