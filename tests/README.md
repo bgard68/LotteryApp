@@ -1,6 +1,6 @@
 ﻿# Tests
 
-109 tests across three projects, one per layer. Run with `dotnet test`.
+175 tests across four projects, one per layer. Run with `dotnet test`.
 
 The PowerShell smoke test in [scripts](../scripts/README.md) adds **32 checks**
 against a real running API - every endpoint, the error conditions, the refresh
@@ -86,3 +86,49 @@ nothing:
   count), powerball.com's HTML response degrades to null instead of throwing,
   and money strings ("$1.5 Billion") parse correctly.
 - **`JackpotStoreTests`** - estimate round-trip and upsert on real SQLite.
+
+## Lottery.Api.Tests (66)
+
+The API layer had no tests at all: `Program.cs`, `LotteryEndpoints.cs`,
+`DrawRefreshService.cs` and `DatabaseHealthCheck.cs` were covered only by the
+smoke test against a running process, which runs after a build rather than as
+part of one.
+
+`LotteryApiFactory` boots the **real** host over a throwaway SQLite file - real
+migrations, real snapshot seed, real routing and middleware. Only the live
+feeds and the timer-driven refresh loop are replaced, so a run needs no network
+and no clock:
+
+- **`EndpointTests`** - the game-name vocabulary (`powerball`,
+  `megamillions`, `mega-millions`, case-insensitively) and a 404 for anything
+  else on *every* endpoint, covering both the sync and async guard paths.
+  Every error branch each handler can take: missing query parameters, a
+  non-numeric white ball named back to the caller, an out-of-era ticket,
+  `count` outside 1..10 at both ends. Also the contract the SPA renders from -
+  `latest` reports **Pending** with null numbers rather than presenting a
+  stale draw as current.
+- **`SecurityHeaderTests` / `DevelopmentPipelineTests`** - the four hardening
+  headers on success *and* on the responses that never reach an endpoint body
+  (the game guard's 404, a validation 400, a routing 404), the absent `Server`
+  header, and the CSP asserted in both directions: sent in Production, and
+  deliberately absent in Development where Scalar is a real HTML page.
+- **`RefreshEndpointTests`** - `/internal/refresh` is the one endpoint that
+  writes and the only one with an access check. Both configurations are
+  pinned: open when no `Refresh:Key` is set (deliberate, for a single-host
+  deployment), and 401 without the header, with a wrong key, or with the right
+  key in the wrong case.
+- **`DatabaseHealthCheckTests`** - all three verdicts, including the one that
+  matters most: a reachable but **empty** database is Degraded, not Healthy,
+  because that is the signature of a half-finished startup.
+- **`DrawRefreshServiceTests`** - the background loop on `FakeTimeProvider`.
+  Startup gap-repair covers both games; one game's feed failing does not cost
+  the other its refresh; a shutdown mid-wait completes rather than faults; and
+  the loop wakes and refreshes again once the next drawing has passed.
+
+## Coverage
+
+`dotnet test --settings coverlet.runsettings` writes Cobertura reports. Those
+settings exclude the OpenAPI source generator's output - several thousand
+generated lines in `Lottery.Api` that nothing we write can cover, and which
+alone cost that layer about forty points - so the number answers "how much of
+*our* code is exercised".
