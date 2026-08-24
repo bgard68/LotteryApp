@@ -110,43 +110,48 @@ public class FeedParsingTests
         Assert.Equal(0, handler.Calls);
     }
 
-    // The three tests below pin what this adapter does TODAY on a bad response.
-    // Unlike its two siblings it does not degrade to null, which contradicts its
-    // own class comment - see the report. They are here so the behaviour cannot
-    // change silently in either direction.
+    // The three tests below hold this adapter to the promise in its own class
+    // comment - "any shape change degrades to null rather than throwing" - and
+    // to what its two siblings already do. Each previously escaped as a type
+    // RefreshGame's catch filter does not match, which turned a bad upstream
+    // response into a 500 from /internal/refresh.
 
     [Theory]
     [InlineData("""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Access Denied</title></head><body>Blocked</body></html>""")]
     [InlineData("Service Unavailable")]
-    public async Task MegaMillions_NonXmlBody_Throws(string body)
+    public async Task MegaMillions_NonXmlBody_DegradesToNull(string body)
     {
         // The bot-challenge page that already retired powerball.com's API, served
-        // with a 200. Not XML, so nothing gets as far as the defensive parsing.
+        // with a 200. Not XML, so XDocument.Parse throws - and that must not
+        // reach the caller.
         var feed = new MegaMillionsJackpotFeed(new HttpClient(new StubHandler(body)));
 
-        await Assert.ThrowsAsync<System.Xml.XmlException>(
-            () => feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None));
+        var info = await feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None);
+
+        Assert.Null(info);
     }
 
     [Theory]
     [InlineData("""{"Jackpot":{"CurrentPrizePool":""")]  // truncated JSON inside a valid envelope
     [InlineData("Access denied")]                        // envelope-shaped page whose text is not JSON
-    public async Task MegaMillions_BodyThatIsNotJson_Throws(string json)
+    public async Task MegaMillions_BodyThatIsNotJson_DegradesToNull(string json)
     {
         var feed = new MegaMillionsJackpotFeed(new HttpClient(new StubHandler(Envelope(json))));
 
-        await Assert.ThrowsAsync<System.Text.Json.JsonException>(
-            () => feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None));
+        var info = await feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None);
+
+        Assert.Null(info);
     }
 
     [Fact]
-    public async Task MegaMillions_ServerError_Throws()
+    public async Task MegaMillions_ServerError_DegradesToNull()
     {
         var feed = new MegaMillionsJackpotFeed(new HttpClient(
             new StubHandler("upstream unavailable", HttpStatusCode.ServiceUnavailable)));
 
-        await Assert.ThrowsAsync<HttpRequestException>(
-            () => feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None));
+        var info = await feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None);
+
+        Assert.Null(info);
     }
 
     [Fact]

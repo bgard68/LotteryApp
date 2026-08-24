@@ -161,37 +161,45 @@ public class SocrataFeedTests
             () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
     }
 
-    // Everything below documents what a bad row does today: it aborts the whole
-    // batch with an exception type RefreshGame's filter does not catch. See the report.
+    // A bad row still refuses the whole batch - delivering a silently short
+    // batch would let gap-repair skip real draws. What it must NOT do is
+    // surface a type RefreshGame's catch filter misses, because that turns one
+    // malformed row into a 500 from /internal/refresh instead of a reported
+    // feed error. InvalidOperationException is the type that filter handles.
 
     [Fact]
-    public async Task MalformedJson_SurfacesAsJsonException()
+    public async Task MalformedJson_IsReportedAsAFeedError()
     {
         var feed = Feed(new StubHandler("""[{"draw_date":"""));
 
-        await Assert.ThrowsAsync<System.Text.Json.JsonException>(
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+
+        // The cause is kept, so the log still says what was actually wrong.
+        Assert.IsAssignableFrom<System.Text.Json.JsonException>(ex.InnerException);
     }
 
     [Theory]
     [InlineData("""[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33"}]""")] // fewer than six numbers
     [InlineData("""[{"draw_date":"2026","winning_numbers":"07 19 33 51 64 18"}]""")]           // truncated date
     [InlineData("""[{"winning_numbers":"07 19 33 51 64 18"}]""")]                              // draw_date absent
-    public async Task TruncatedRow_AbortsTheWholeBatch(string body)
+    public async Task TruncatedRow_RefusesTheBatch_AsAFeedError(string body)
     {
         var feed = Feed(new StubHandler(body));
 
-        await Assert.ThrowsAnyAsync<ArgumentException>(
+        await Assert.ThrowsAsync<InvalidOperationException>(
             () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
     }
 
     [Fact]
-    public async Task NonNumericNumbers_AbortTheWholeBatch()
+    public async Task NonNumericNumbers_RefuseTheBatch_AsAFeedError()
     {
         var feed = Feed(new StubHandler(
             """[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 XX 51 64 18"}]"""));
 
-        await Assert.ThrowsAsync<FormatException>(
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+
+        Assert.IsType<FormatException>(ex.InnerException);
     }
 }
