@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
 using Lottery.Application.Abstractions;
 using Lottery.Domain;
@@ -20,12 +21,26 @@ public sealed class MegaMillionsJackpotFeed(HttpClient http) : IJackpotFeed
         if (game != Game.MegaMillions)
             return null;
 
-        var xml = await http.GetStringAsync(Endpoint, ct);
-        var json = XDocument.Parse(xml).Root?.Value;
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
+        MmPayload? payload;
+        try
+        {
+            var xml = await http.GetStringAsync(Endpoint, ct);
+            var json = XDocument.Parse(xml).Root?.Value;
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
 
-        var payload = JsonSerializer.Deserialize<MmPayload>(json, JsonOptions);
+            payload = JsonSerializer.Deserialize<MmPayload>(json, JsonOptions);
+        }
+        // Both sibling feeds already guard exactly this, and the summary above
+        // promises it. Without it a bot-challenge HTML page served with a 200 -
+        // which is precisely what retired powerball.com's API - reaches
+        // XDocument.Parse and throws a type RefreshGame's catch filter does not
+        // match, so /internal/refresh returns 500 instead of a feed error.
+        catch (Exception ex) when (ex is HttpRequestException or XmlException or JsonException)
+        {
+            return null;
+        }
+
         if (payload?.Jackpot is null)
             return null;
 
@@ -37,25 +52,22 @@ public sealed class MegaMillionsJackpotFeed(HttpClient http) : IJackpotFeed
             Game.MegaMillions,
             lastDrawDate,
             payload.Jackpot.CurrentPrizePool,
-            payload.Jackpot.Winners is int w ? w > 0 : null,
+            payload.Jackpot.JackpotWinners is { } winners ? winners > 0 : null,
             payload.Jackpot.NextPrizePool,
             payload.Jackpot.NextCashValue);
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
-
-    internal sealed class MmPayload
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        public MmJackpot? Jackpot { get; set; }
-    }
+        PropertyNameCaseInsensitive = true,
+    };
 
-    internal sealed class MmJackpot
-    {
-        public string? PlayDate { get; set; }
-        public decimal? CurrentPrizePool { get; set; }
-        public decimal? NextPrizePool { get; set; }
-        public decimal? CurrentCashValue { get; set; }
-        public decimal? NextCashValue { get; set; }
-        public int? Winners { get; set; }
-    }
+    private sealed record MmPayload(MmJackpot? Jackpot);
+
+    private sealed record MmJackpot(
+        string? PlayDate,
+        decimal? CurrentPrizePool,
+        int? JackpotWinners,
+        decimal? NextPrizePool,
+        decimal? NextCashValue);
 }
