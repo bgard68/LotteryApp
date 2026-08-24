@@ -1,6 +1,6 @@
 ﻿# Tests
 
-175 tests across four projects, one per layer. Run with `dotnet test`.
+316 tests across four projects, one per layer. Run with `dotnet test`.
 
 The PowerShell smoke test in [scripts](../scripts/README.md) adds **32 checks**
 against a real running API - every endpoint, the error conditions, the refresh
@@ -9,7 +9,7 @@ asserts the *absence* of the `Server` header).
 
 Back to the [main README](../../README.md).
 
-## Lottery.Domain.Tests (24)
+## Lottery.Domain.Tests (58)
 
 Pure logic, no mocks needed:
 
@@ -27,7 +27,7 @@ Pure logic, no mocks needed:
   of draws, and full-range coverage (every ball 1..69 and 1..26 appears -
   guards off-by-one at both ends).
 
-## Lottery.Application.Tests (56)
+## Lottery.Application.Tests (65)
 
 Use cases against in-memory fakes + `FakeTimeProvider` (virtual time - the
 Pending test advances the clock past a drawing in microseconds):
@@ -68,7 +68,7 @@ The four use cases that had no test file now have one. All four guard a
   era already uses the new rules, and a clock set before any era began still
   yields one current era instead of throwing.
 
-## Lottery.Infrastructure.Tests (29)
+## Lottery.Infrastructure.Tests (127)
 
 Against a **real SQLite database** (temp file, migrated by DbUp per test class)
 - with Dapper the SQL is the logic, so mocking the connection would test
@@ -132,3 +132,17 @@ settings exclude the OpenAPI source generator's output - several thousand
 generated lines in `Lottery.Api` that nothing we write can cover, and which
 alone cost that layer about forty points - so the number answers "how much of
 *our* code is exercised".
+
+| Layer | Line coverage |
+|---|---|
+| `Lottery.Api` | 100% (167/167) |
+| `Lottery.Application` | 100% (87/87) |
+| `Lottery.Infrastructure` | 100% (177/177) |
+| `Lottery.Domain` | 98.8% (164/166) |
+
+The two uncovered lines are `DrawSchedule.cs:30` and `:49` - the
+`"No draw day found within 8 days - unreachable."` throws. They are exactly
+that: the loop scans eight consecutive days, so every weekday occurs at least
+once and both games draw on two or more. The only way past the loop is a `Game`
+value outside the enum, which `DrawDays()` rejects first. Reaching them would
+mean changing production code to accommodate a test, so they stay uncovered.
