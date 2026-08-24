@@ -52,22 +52,25 @@ public sealed class MegaMillionsJackpotFeed(HttpClient http) : IJackpotFeed
             Game.MegaMillions,
             lastDrawDate,
             payload.Jackpot.CurrentPrizePool,
-            payload.Jackpot.JackpotWinners is { } winners ? winners > 0 : null,
+            payload.Jackpot.Winners is int w ? w > 0 : null,
             payload.Jackpot.NextPrizePool,
             payload.Jackpot.NextCashValue);
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
+
+    internal sealed class MmPayload
     {
-        PropertyNameCaseInsensitive = true,
-    };
+        public MmJackpot? Jackpot { get; set; }
+    }
 
-    private sealed record MmPayload(MmJackpot? Jackpot);
-
-    private sealed record MmJackpot(
-        string? PlayDate,
-        decimal? CurrentPrizePool,
-        int? JackpotWinners,
-        decimal? NextPrizePool,
-        decimal? NextCashValue);
+    internal sealed class MmJackpot
+    {
+        public string? PlayDate { get; set; }
+        public decimal? CurrentPrizePool { get; set; }
+        public decimal? NextPrizePool { get; set; }
+        public decimal? CurrentCashValue { get; set; }
+        public decimal? NextCashValue { get; set; }
+        public int? Winners { get; set; }
+    }
 }
