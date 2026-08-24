@@ -20,6 +20,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      # The narrowest grant that lets analyze upload its SARIF - code scanning
+      # has no read-only ingest path, so this is the floor rather than a
+      # convenience. Scoped to this job; the workflow default stays read-only.
       security-events: write
       contents: read
     steps:
