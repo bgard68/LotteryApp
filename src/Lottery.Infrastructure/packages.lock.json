@@ -20,12 +20,12 @@
       },
       "dbup-sqlserver": {
         "type": "Direct",
-        "requested": "[6.0.16, )",
-        "resolved": "6.0.16",
-        "contentHash": "r9DrDemZOU1u2FOkQaPDnQuySds0pxfc7ajb04WCJ3PRciGGwbQ36ozhL4v+uauCv+GoSFc4FdDJW/rbLjTvGg==",
+        "requested": "[7.2.0, )",
+        "resolved": "7.2.0",
+        "contentHash": "1xhdu2ZoQEi2nNrirBfkkfn+AbHWQvy8CGilb+5dIjghFJrsMKFM17DiI5Nz+ofWg9N1lqz5WorujzuGvc/+fQ==",
         "dependencies": {
-          "Microsoft.Data.SqlClient": "5.2.2",
-          "dbup-core": "6.0.15"
+          "Microsoft.Data.SqlClient": "6.1.4",
+          "dbup-core": "6.1.1"
         }
       },
       "Microsoft.Data.SqlClient": {
@@ -102,8 +102,8 @@
       },
       "dbup-core": {
         "type": "Transitive",
-        "resolved": "6.0.15",
-        "contentHash": "w0eaoyVitzgBiHTILEnj23smrbrxZ1nLF7K8uOyG6rvrctRtC0NTuSYHoB/3aq+B9hi9E/DiW9pOtNto5V9P3g==",
+        "resolved": "6.1.1",
+        "contentHash": "kgpuyJVEFJHoIj/slnc994Go88aoeZqNDfGHDBr4sh7CsEWwJhOTCt/FJqO4ziUImL5L0NEY0kxxOiNgPKI2Fw==",
         "dependencies": {
           "Microsoft.Extensions.Logging.Abstractions": "8.0.0"
         }
