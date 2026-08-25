@@ -1,0 +1,69 @@
+name: Deploy frontend
+
+# Live: frontend changes deploy automatically and independently of the API
+# (decision D15). Independence comes from the path filter below, not from
+# living on a separate branch - a change under src/** never reaches here.
+#
+# The free Static Web Apps SKU has no linked-backend proxy, so the build writes
+# config.json from the API_BASE_URL variable and the browser calls the API's
+# origin directly, allowed by CORS - see docs/AZURE-DEPLOYMENT.md.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lottery-web/**"
+      - ".github/workflows/deploy-web.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Two merges in quick succession would otherwise race, and the older build can
+# win. Serialise rather than cancel: a half-uploaded site is worse than a queued
+# deploy.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Nothing here pushes, so the job token has no use after the clone.
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: lottery-web/package-lock.json
+
+      - name: Install, test, build
+        working-directory: lottery-web
+        run: |
+          npm ci
+          npx ng test --watch=false --browsers=ChromeHeadless
+          npx ng build
+
+      # The free Static Web Apps SKU cannot proxy to a backend, so the browser
+      # calls the API origin directly. Written at deploy time from a repository
+      # VARIABLE (a public URL, not a secret) so one build artefact works in any
+      # environment - see docs/AZURE-DEPLOYMENT.md.
+      - name: Write runtime config
+        run: |
+          printf '{"apiBaseUrl":"%s"}' "${{ vars.API_BASE_URL }}" \
+            > lottery-web/dist/lottery-web/browser/config.json
+          cat lottery-web/dist/lottery-web/browser/config.json
+
+      - name: Deploy to Static Web Apps
+        uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9 # v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          skip_app_build: true
+          app_location: lottery-web/dist/lottery-web/browser
+          output_location: ""

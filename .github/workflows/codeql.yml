@@ -1,11 +1,23 @@
 name: CodeQL
 
-# C# analysis for the API. The Angular app lives on the frontend branch and is
-# analyzed by that branch's own CodeQL workflow (JavaScript/TypeScript) - the
-# branches are never merged, so each carries the analysis its code needs.
+# Both languages now live in this repository - the API under src/ and the
+# Angular app under lottery-web/ - so one workflow analyzes both, as a matrix.
+# Previously these were two separate files on two branches, which is how the
+# frontend ended up on a different codeql-action version from the backend and
+# its Analyze job failed for weeks before anyone noticed.
 on:
   push:
     branches: [main]
+    # Documentation cannot break a build, so a docs-only push does not run
+    # one. Deliberately on `push` only: `pull_request` stays unfiltered because
+    # these are required status checks, and a required check that is SKIPPED
+    # never reports - leaving the pull request blocked forever rather than
+    # passing. ci-frontend.yml already documents the same reasoning.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "demo/**"
+      - "LICENSE"
   pull_request:
     branches: [main]
   schedule:
@@ -22,7 +34,7 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (csharp)
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -31,6 +43,23 @@ jobs:
       # convenience. Scoped to this job; the workflow default stays read-only.
       security-events: write
       contents: read
+
+    strategy:
+      # One language failing must not hide the other's results.
+      fail-fast: false
+      matrix:
+        include:
+          # build-mode: manual for C#. Buildless analysis does not fully
+          # resolve dependencies, so dataflow through libraries - our Dapper
+          # SQL paths and the feed HTTP clients - is where it is weakest. A
+          # real build costs ~2 minutes and materially improves fidelity.
+          - language: csharp
+            build-mode: manual
+          # build-mode: none is correct for JS/TS - CodeQL reads the sources
+          # directly, no compilation is involved.
+          - language: javascript-typescript
+            build-mode: none
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -38,22 +67,20 @@ jobs:
           persist-credentials: false
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        if: matrix.language == 'csharp'
         with:
           global-json-file: global.json
 
-      # build-mode: manual (was: none). Buildless C# analysis does not fully
-      # resolve dependencies, so dataflow through libraries - our Dapper SQL
-      # paths and the feed HTTP clients - is where it is weakest. A real build
-      # costs ~2 minutes and materially improves fidelity.
       - uses: github/codeql-action/init@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
-          languages: csharp
-          build-mode: manual
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
           queries: security-extended
 
       - name: Build
+        if: matrix.language == 'csharp'
         run: dotnet build --no-incremental
 
       - uses: github/codeql-action/analyze@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4
         with:
-          category: "/language:csharp"
+          category: "/language:${{ matrix.language }}"

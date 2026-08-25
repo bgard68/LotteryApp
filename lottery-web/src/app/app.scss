@@ -1,0 +1,93 @@
+main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.masthead {
+  h1 { margin: 0; font-size: 1.4rem; }
+  .muted { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.85rem; }
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+footer {
+  margin-top: 1rem;
+  border-top: 1px solid var(--card-border);
+  padding-top: 0.9rem;
+
+  p { color: var(--muted); font-size: 0.75rem; margin: 0; }
+}
+
+// Bottom navigation, phone only - the shell renders it nowhere else.
+.tabbar {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 10;
+  display: flex;
+  background: var(--card-bg);
+  border-top: 1px solid var(--card-border);
+  // Keeps the buttons above the home indicator on notched phones.
+  padding-bottom: env(safe-area-inset-bottom, 0);
+
+  button {
+    flex: 1;
+    font: inherit;
+    font-size: 0.8rem;
+    // 44px minimum touch target.
+    min-height: 2.75rem;
+    padding: 0.55rem 0 0.5rem;
+    border: none;
+    border-top: 2px solid transparent;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+
+    &[aria-current='page'] {
+      color: inherit;
+      font-weight: 600;
+      background: var(--inset-bg);
+      border-top-color: var(--hit-color);
+    }
+  }
+
+  .badge {
+    display: inline-block;
+    margin-left: 0.3rem;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    background: var(--hit-color);
+    color: #fff;
+  }
+}
+
+@media (max-width: 640px) {
+  main {
+    padding: 1rem 0.75rem 1.5rem;
+    gap: 0.75rem;
+  }
+
+  // Clears the fixed tab bar so the footer is never trapped underneath it.
+  main.tabbed {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  // The 320px minimum overflows a 320px-wide phone; one column instead.
+  .cards { grid-template-columns: minmax(0, 1fr); }
+
+  .masthead {
+    h1 { font-size: 1.2rem; }
+    .muted { font-size: 0.8rem; }
+  }
+
+  footer { margin-top: 0.5rem; }
+}

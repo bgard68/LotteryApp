@@ -1,0 +1,307 @@
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 1.1rem 1.3rem;
+
+  h2 { margin: 0 0 0.15rem; font-size: 1.05rem; }
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: stretch;
+  margin-top: 0.9rem;
+}
+
+.panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem 0.75rem;
+  margin: 0;
+
+  legend {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 0 0.35rem;
+  }
+}
+
+select, input, button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: inherit;
+  padding: 0.45rem 0.6rem;
+}
+
+.count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+
+  input { width: 3.4rem; text-align: center; }
+}
+
+.which {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.ticket-row input.pick {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--hit-color);
+  cursor: pointer;
+}
+
+.tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.ticket-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 0.15rem 0.4rem;
+
+  // This ticket appears in the big-wins panel.
+  &.big-win {
+    border-color: var(--hit-color);
+
+    .ticket-label { color: var(--hit-color); }
+  }
+}
+
+.ticket-label {
+  min-width: 1.9rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.inputs {
+  display: flex;
+  gap: 0.4rem;
+
+  input {
+    width: 3.1rem;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+    &::-webkit-outer-spin-button, &::-webkit-inner-spin-button { appearance: none; }
+  }
+
+  .special.pb { border-color: var(--pb-accent); }
+  .special.mm { border-color: var(--mm-accent); }
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+  &:disabled { opacity: 0.5; cursor: default; }
+}
+
+.muted { color: var(--muted); font-size: 0.85rem; margin: 0.2rem 0; }
+.muted.small { font-size: 0.78rem; }
+.hint { color: var(--muted); font-size: 0.75rem; margin: 0.5rem 0 0; }
+.error { color: #b3261e; font-size: 0.85rem; margin: 0.5rem 0 0; }
+
+.results {
+  border-top: 1px solid var(--card-border);
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+}
+
+// The colour key, above the first row that uses it. The swatches deliberately
+// repeat number-balls' own styling (including the pulse), so the key looks and
+// moves like the thing it describes rather than being a generic dot.
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  margin: 0 0 0.7rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+
+  .key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .swatch {
+    width: 0.95rem;
+    height: 0.95rem;
+    border-radius: 50%;
+    background: var(--ball-bg);
+    border: 1px solid var(--ball-border);
+    flex: none;
+
+    &.hit {
+      border-color: var(--hit-color);
+      box-shadow: 0 0 0 2px var(--hit-color);
+      animation: legend-flash 1s ease-in-out infinite;
+    }
+
+    &.special.pb { background: var(--pb-accent); border-color: var(--pb-accent); }
+    &.special.mm { background: var(--mm-accent); border-color: var(--mm-accent); }
+  }
+}
+
+@keyframes legend-flash {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legend .swatch.hit { animation: none; }
+}
+
+.big-wins {
+  border: 2px solid var(--hit-color);
+  border-radius: 10px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 0.7rem;
+
+  .big-title {
+    margin: 0 0 0.35rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--hit-color);
+  }
+
+  .big-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.8rem;
+    font-size: 0.85rem;
+    padding: 0.3rem 0;
+
+    .big-when { min-width: 9.5rem; }
+    .big-tier { font-weight: 700; text-align: right; }
+    .big-payout { display: block; color: var(--hit-color); font-size: 0.95rem; }
+  }
+}
+
+.page-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+
+  select { padding: 0.25rem 0.4rem; font-size: 0.8rem; }
+}
+
+.ticket-results {
+  margin-bottom: 0.6rem;
+}
+
+.match {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  background: var(--inset-bg);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  margin: 0.35rem 0;
+  font-size: 0.85rem;
+
+  .when { min-width: 9.5rem; }
+  .tier { font-weight: 600; }
+}
+
+@media (max-width: 640px) {
+  .card { padding: 0.9rem; }
+
+  // The two fieldsets sat side by side; at phone width they stack full-bleed.
+  .controls { flex-direction: column; gap: 0.6rem; }
+
+  .panel {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.6rem 0.7rem 0.7rem;
+
+    select { flex: 1; min-width: 0; }
+    button { width: 100%; }
+  }
+
+  .count {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  // Six fixed-width inputs overflow a 320px screen; let them share the row.
+  .ticket-row {
+    gap: 0.35rem;
+    padding: 0.15rem 0.2rem;
+  }
+
+  .ticket-label { min-width: 1.2rem; font-size: 0.75rem; }
+
+  .inputs {
+    flex: 1;
+    min-width: 0;
+    gap: 0.25rem;
+
+    // Font size stays at 1rem: anything smaller makes iOS Safari zoom on focus.
+    input {
+      flex: 1 1 0;
+      width: auto;
+      min-width: 0;
+      padding: 0.45rem 0.1rem;
+    }
+  }
+
+  // Date, balls and payout stop competing for one line and stack instead.
+  .match,
+  .big-wins .big-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+    text-align: center;
+  }
+
+  .match {
+    padding: 0.5rem 0.5rem;
+
+    .when { min-width: 0; }
+    app-number-balls { justify-content: center; }
+  }
+
+  .big-wins {
+    padding: 0.7rem 0.6rem;
+
+    .big-row {
+      .big-when { min-width: 0; }
+      .big-tier { text-align: center; }
+      app-number-balls { justify-content: center; }
+    }
+  }
+
+  .page-size { flex-wrap: wrap; }
+}

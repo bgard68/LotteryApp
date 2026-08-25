@@ -1,10 +1,11 @@
 version: 2
 
-# Dependabot reads this file from the DEFAULT branch only (main), so entries
-# covering the frontend branch must declare target-branch explicitly - without
-# it, lottery-web's npm tree would never be scanned (it does not exist on main).
+# One branch now carries both halves, so every ecosystem is scanned from the
+# default branch and no entry needs `target-branch`. The previous two-branch
+# layout needed it, and getting it wrong is why the frontend's NuGet packages
+# went unscanned entirely - ignore rules and ecosystems are per-entry, so each
+# had to be declared twice and one of them simply was not.
 updates:
-  # ---------- main: the .NET API ----------
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
@@ -15,22 +16,14 @@ updates:
     ignore:
       # Microsoft.AspNetCore.OpenApi 10.0.x requires Microsoft.OpenApi
       # >= 2.7.5 && < 3.0.0, so a 3.x bump fails the restore outright
-      # (NU1608, promoted to an error here). #107 pinned 2.x for exactly this
-      # reason and Dependabot re-proposed it anyway; the PR cannot pass and
-      # cannot be merged, so it is noise rather than a signal. Drop this entry
-      # when AspNetCore.OpenApi takes a 3.x dependency.
+      # (NU1608, promoted to an error here). The PR cannot pass and cannot be
+      # merged, so it is noise rather than a signal. Drop this entry when
+      # AspNetCore.OpenApi takes a 3.x dependency.
       - dependency-name: "Microsoft.OpenApi"
         update-types: ["version-update:semver-major"]
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-
-  # ---------- frontend: the Angular app ----------
   - package-ecosystem: "npm"
     directory: "/lottery-web"
-    target-branch: "frontend"
     schedule:
       interval: "weekly"
     groups:
@@ -41,42 +34,18 @@ updates:
       npm-minor-patch:
         update-types: ["minor", "patch"]
     ignore:
-      # Both of these are capped by a peer dependency, so a major bump fails
-      # `npm ci` on ERESOLVE and the PR can never go green. They are proposed
-      # every week regardless; ignoring the major keeps minor and patch
-      # updates - including security ones - flowing.
+      # Both are capped by a peer dependency, so a major bump fails `npm ci`
+      # on ERESOLVE and the PR can never go green. Ignoring the major keeps
+      # minor and patch updates - including security ones - flowing.
       #
-      # @angular/build 22.x requires typescript >=6.0 <6.1. Lift this when
-      # Angular's peer range moves.
+      # @angular/build 22.x requires typescript >=6.0 <6.1.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
       # karma-jasmine-html-reporter 2.2 requires jasmine-core ^4 || ^5 || ^6.
-      # Lift this when that reporter accepts 7.x.
       - dependency-name: "jasmine-core"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
-    target-branch: "frontend"
     schedule:
       interval: "weekly"
-
-  # The frontend branch carries src/Lottery.Api as well as the SPA, and its CI
-  # restores and builds it - but the nuget entry above has no target-branch, so
-  # it covers main alone. Without this the backend packages on that branch were
-  # never bumped and never scanned.
-  - package-ecosystem: "nuget"
-    directory: "/"
-    target-branch: "frontend"
-    schedule:
-      interval: "weekly"
-    groups:
-      nuget-minor-patch:
-        update-types: ["minor", "patch"]
-    ignore:
-      # Same constraint as the main entry above, and it needs restating here:
-      # ignore rules are per-entry, so main's did not cover this branch and
-      # Microsoft.OpenApi 3.x was proposed again as #125. AspNetCore.OpenApi
-      # 10.0.x requires >= 2.7.5 && < 3.0.0, so the restore trips NU1608.
-      - dependency-name: "Microsoft.OpenApi"
-        update-types: ["version-update:semver-major"]
