@@ -73,3 +73,10 @@ updates:
     groups:
       nuget-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Same constraint as the main entry above, and it needs restating here:
+      # ignore rules are per-entry, so main's did not cover this branch and
+      # Microsoft.OpenApi 3.x was proposed again as #125. AspNetCore.OpenApi
+      # 10.0.x requires >= 2.7.5 && < 3.0.0, so the restore trips NU1608.
+      - dependency-name: "Microsoft.OpenApi"
+        update-types: ["version-update:semver-major"]
