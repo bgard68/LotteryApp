@@ -234,4 +234,25 @@ public class RefreshGameTests
         Assert.True(result.UpToDate);
         Assert.Equal(2, repo.Draws.Count(d => d.Game == Game.Powerball));
     }
+
+    [Fact]
+    public async Task ADrawDatedBeforeAnyKnownEra_IsReportedAsAFeedError_NotThrown()
+    {
+        // EraValidator.Validate calls RuleEras.ForDate, which THROWS for a date
+        // no era covers rather than returning a violation. That exception used
+        // to escape ExecuteAsync entirely, and /internal/refresh - which has no
+        // try/catch of its own - answered 500. This class documents that feed
+        // failures are reported, never thrown.
+        var repo = new FakeDrawRepository();
+        var stale = Draw.Create(Game.Powerball, new DateOnly(1980, 1, 5), [1, 2, 3, 4, 5], 6);
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.Zero));
+
+        var refresh = new RefreshGame(repo, new FakeNumbersFeed([stale]), new FakeJackpotFeed(null),
+            new FakeJackpotStore(), time);
+
+        var result = await refresh.ExecuteAsync(Game.Powerball, CancellationToken.None);
+
+        Assert.NotNull(result.FeedError);
+        Assert.Equal(0, result.NewDraws);
+    }
 }
