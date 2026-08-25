@@ -17,6 +17,23 @@ public class PickGeneratorTests
     }
 
     [Fact]
+    public void Generate_WithoutAnInjectedRandom_StillHonoursTheEra()
+    {
+        // Production constructs the generator with no Random at all and falls back
+        // to Random.Shared - the seeded constructor above is the test-only path.
+        var generator = new RandomPickGenerator();
+
+        for (var i = 0; i < 200; i++)
+        {
+            var (whites, special) = generator.Generate(MegaMillions);
+            Assert.Equal(5, whites.Count);
+            Assert.Equal(5, whites.Distinct().Count());
+            Assert.All(whites, w => Assert.True(MegaMillions.IsValidWhite(w)));
+            Assert.True(MegaMillions.IsValidSpecial(special));
+        }
+    }
+
+    [Fact]
     public void Generate_AlwaysValidForEra()
     {
         var generator = new RandomPickGenerator(new Random(7));

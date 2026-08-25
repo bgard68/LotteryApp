@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# A push that supersedes an in-flight run makes that run's verdict irrelevant.
+# Cancelling frees the queue instead of leaving work for cleanup-runs to prune.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend build, tests, live smoke test
@@ -51,6 +57,12 @@ jobs:
             curl -fsS http://localhost:5090/healthz && break
             sleep 2
           done
+          # The loop exits 0 even when the API never came up, because the final
+          # `sleep` succeeds. The smoke test would still fail the job, but it
+          # would report a confusing "endpoint returned nothing" instead of
+          # "the API never started".
+          curl -fsS http://localhost:5090/healthz > /dev/null \
+            || { echo "::error::API did not become healthy within 60s."; exit 1; }
 
       - name: Smoke test (all endpoints incl. error conditions)
         shell: pwsh

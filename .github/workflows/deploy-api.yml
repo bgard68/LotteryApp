@@ -20,7 +20,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write # OIDC federation - GitHub proves its identity per run
 
 # Two merges in quick succession would otherwise race, and the older build can
 # win. Serialise instead of cancelling: a half-finished deploy is worse than a
@@ -33,6 +32,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      # OIDC federation - GitHub proves its identity per run. This token can
+      # authenticate to the Azure subscription, so it is granted to the job
+      # that calls azure/login rather than workflow-wide: a job added later
+      # (a notifier, a changelog step) should not inherit it silently.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -79,4 +85,10 @@ jobs:
           # without one; the script waits for /healthz before asserting, because
           # a post-deploy run races App Service recycling the app.
           REFRESH_KEY: ${{ secrets.REFRESH_KEY }}
-        run: ./scripts/smoke-test.ps1 -BaseUrl ${{ vars.API_BASE_URL }}
+          # Through env rather than ${{ }} in the run line: an expression is
+          # substituted textually before the shell parses it, so the value is
+          # read as code. Only a maintainer can set a repository variable, so
+          # this is consistency with the rest of the repo rather than a fix for
+          # a reachable injection.
+          API_BASE_URL: ${{ vars.API_BASE_URL }}
+        run: ./scripts/smoke-test.ps1 -BaseUrl $env:API_BASE_URL

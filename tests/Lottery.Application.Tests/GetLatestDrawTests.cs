@@ -42,6 +42,26 @@ public class GetLatestDrawTests
     }
 
     [Fact]
+    public async Task PublishedResult_CarriesTheSpecialBallAndJackpotFacts()
+    {
+        // The result is a projection of the stored draw; the special ball and the
+        // jackpot facts sit beside the white balls on the card, and a mapping that
+        // dropped or crossed them would look correct until someone read it.
+        var repo = new FakeDrawRepository();
+        repo.Draws.Add(Draw.Create(Game.Powerball, new DateOnly(2026, 7, 25), [7, 19, 33, 51, 64], 18,
+            jackpotAmount: 214_000_000m, jackpotWon: true));
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 27, 16, 0, 0, TimeSpan.Zero)); // Mon noon ET
+
+        var result = await new GetLatestDraw(repo, time).ExecuteAsync(Game.Powerball, CancellationToken.None);
+
+        Assert.Equal(Game.Powerball, result!.Game);
+        Assert.Equal(DrawStatus.Published, result.Status);
+        Assert.Equal(18, result.Special);
+        Assert.Equal(214_000_000m, result.JackpotAmount);
+        Assert.True(result.JackpotWon);
+    }
+
+    [Fact]
     public async Task EmptyDatabase_IsPending()
     {
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 27, 16, 0, 0, TimeSpan.Zero));

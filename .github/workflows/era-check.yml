@@ -33,17 +33,36 @@ jobs:
 
       - name: Start API
         run: |
+          set -euo pipefail
           dotnet run --project src/Lottery.Api --urls http://localhost:5090 &
           for i in $(seq 1 30); do
             curl -fsS http://localhost:5090/healthz && break
             sleep 2
           done
+          # The loop above exits 0 whether or not the API ever came up - the
+          # final `sleep` returns 0. Without this the failure is attributed to
+          # whatever runs next, and in this workflow it was not attributed at
+          # all: see the validation step below.
+          curl -fsS http://localhost:5090/healthz > /dev/null \
+            || { echo "::error::API did not become healthy within 60s."; exit 1; }
 
       - name: Live-feed era validation
         run: |
+          # Strict mode matters more here than anywhere else in the repo. This
+          # step is the ONLY thing watching for an undocumented rule change,
+          # and without `set -e` an unreachable API left RESPONSE empty, jq
+          # printed nothing, and `[ "" -gt 0 ]` returned 2 - which makes the
+          # `if` false, so the step PASSED. A monitor that goes green when it
+          # cannot see anything is worse than no monitor.
+          set -euo pipefail
           RESPONSE=$(curl -fsS -X POST http://localhost:5090/internal/refresh)
           echo "$RESPONSE" | jq .
-          SKIPPED=$(echo "$RESPONSE" | jq '[.[].skippedInvalid] | add')
+          SKIPPED=$(echo "$RESPONSE" | jq '[.[].skippedInvalid] | add // 0')
+          case "$SKIPPED" in
+            ''|*[!0-9]*)
+              echo "::error::Could not read skippedInvalid from the refresh response."
+              exit 1 ;;
+          esac
           if [ "$SKIPPED" -gt 0 ]; then
             echo "::error::$SKIPPED era-invalid draw(s) in the live feed - possible undocumented rule change. Update RuleEras and refresh the snapshots (see docs/REQUIREMENTS-AND-DECISIONS.md D10)."
             exit 1
