@@ -255,4 +255,46 @@ public class RefreshGameTests
         Assert.NotNull(result.FeedError);
         Assert.Equal(0, result.NewDraws);
     }
+
+    [Fact]
+    public async Task AZeroJackpot_DoesNotOverwriteTheStoredEstimate()
+    {
+        // The live failure: NY publishes the next Powerball draw with zeros
+        // before the amount is announced, the old code saved that, and the card
+        // showed "Estimated jackpot $0" instead of the figure it had a moment
+        // earlier. The right behaviour is to leave the good value standing.
+        var store = new FakeJackpotStore();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 25, 3, 0, 0, TimeSpan.Zero));
+        await store.SaveAsync(new JackpotEstimate(Game.Powerball, 150_000_000m, 70_000_000m,
+            time.GetUtcNow()), CancellationToken.None);
+
+        var zeroed = new JackpotInfo(Game.Powerball, null, null, null,
+            NextEstimatedJackpot: 0m, NextCashValue: 0m);
+        var refresh = new RefreshGame(new FakeDrawRepository(), new FakeNumbersFeed([]),
+            new FakeJackpotFeed(zeroed), store, time);
+
+        await refresh.ExecuteAsync(Game.Powerball, CancellationToken.None);
+
+        Assert.Equal(150_000_000m, store.Saved!.NextEstimatedJackpot);
+        Assert.Equal(70_000_000m, store.Saved.NextCashValue);
+    }
+
+    [Fact]
+    public async Task ARealJackpot_StillReplacesTheStoredEstimate()
+    {
+        // The guard must not freeze the value - a genuine new figure still lands.
+        var store = new FakeJackpotStore();
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 8, 25, 3, 0, 0, TimeSpan.Zero));
+        await store.SaveAsync(new JackpotEstimate(Game.Powerball, 150_000_000m, 70_000_000m,
+            time.GetUtcNow()), CancellationToken.None);
+
+        var announced = new JackpotInfo(Game.Powerball, null, null, null,
+            NextEstimatedJackpot: 180_000_000m, NextCashValue: 84_000_000m);
+        var refresh = new RefreshGame(new FakeDrawRepository(), new FakeNumbersFeed([]),
+            new FakeJackpotFeed(announced), store, time);
+
+        await refresh.ExecuteAsync(Game.Powerball, CancellationToken.None);
+
+        Assert.Equal(180_000_000m, store.Saved!.NextEstimatedJackpot);
+    }
 }

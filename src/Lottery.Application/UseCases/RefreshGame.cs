@@ -90,10 +90,21 @@ public sealed class RefreshGame(
         if (info is null)
             return false;
 
-        if (info.NextEstimatedJackpot is not null || info.NextCashValue is not null)
+        // Zero is not a jackpot, it is a placeholder: sources publish the next
+        // draw before its amount is announced, and a plain null check accepted
+        // that - replacing a good stored estimate with 0, which the site then
+        // rendered as "Estimated jackpot $0".
+        //
+        // Guarded here as well as in the feed so no source can poison the store
+        // this way. Skipping the save leaves the previous estimate in place,
+        // which is the right thing to keep showing until the real figure lands.
+        var estimate = info.NextEstimatedJackpot is > 0 ? info.NextEstimatedJackpot : null;
+        var cashValue = info.NextCashValue is > 0 ? info.NextCashValue : null;
+
+        if (estimate is not null || cashValue is not null)
         {
             await jackpotStore.SaveAsync(new JackpotEstimate(
-                game, info.NextEstimatedJackpot, info.NextCashValue, time.GetUtcNow()), ct);
+                game, estimate, cashValue, time.GetUtcNow()), ct);
         }
 
         if (info is { LastDrawDate: not null, LastJackpot: not null })

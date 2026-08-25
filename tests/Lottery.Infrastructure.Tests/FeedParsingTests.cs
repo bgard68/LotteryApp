@@ -366,4 +366,46 @@ public class FeedParsingTests
     {
         Assert.Null(PowerballJackpotFeed.ParseMoney(null));
     }
+
+    [Fact]
+    public async Task NyLottery_ZeroJackpotOnTheNextDraw_IsNotAFigure()
+    {
+        // Exactly what the live feed serves in the minutes after a drawing: the
+        // next draw is listed before its jackpot is announced, with zeros. This
+        // reached the site as "Estimated jackpot $0" for Powerball.
+        var handler = new StubHandler(
+            """
+            {"data":{"draws":[
+              {"drawTime":1785729600000,"estimatedJackpot":0,"jackpots":[{"amount":0,"cashAmount":0}]},
+              {"drawTime":1785124800000,"results":[{"primary":["1","2","3","4","5"],"secondary":["6"]}]}
+            ]}}
+            """);
+        var feed = new NyLotteryJackpotFeed(new HttpClient(handler));
+
+        var info = await feed.GetJackpotAsync(Lottery.Domain.Game.Powerball, CancellationToken.None);
+
+        // Null, not zero: RefreshGame then leaves the stored estimate alone and
+        // the card keeps showing the last real figure.
+        Assert.Null(info);
+    }
+
+    [Fact]
+    public async Task NyLottery_PrefersAnAnnouncedDrawOverAZeroedLaterOne()
+    {
+        // The newest entry is a placeholder; the real figure is on the nearer
+        // draw. Ordering by draw time alone would have picked the zero.
+        var handler = new StubHandler(
+            """
+            {"data":{"draws":[
+              {"drawTime":1785124800000,"estimatedJackpot":150000000,"jackpots":[{"amount":150000000,"cashAmount":70000000}]},
+              {"drawTime":1785729600000,"estimatedJackpot":0,"jackpots":[{"amount":0,"cashAmount":0}]}
+            ]}}
+            """);
+        var feed = new NyLotteryJackpotFeed(new HttpClient(handler));
+
+        var info = await feed.GetJackpotAsync(Lottery.Domain.Game.Powerball, CancellationToken.None);
+
+        Assert.Equal(150_000_000m, info!.NextEstimatedJackpot);
+        Assert.Equal(70_000_000m, info.NextCashValue);
+    }
 }
