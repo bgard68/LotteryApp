@@ -42,11 +42,21 @@ jobs:
       # the whole stack end to end on every push.
       - name: Start API
         run: |
-          dotnet run --project src/Lottery.Api --no-build --urls http://localhost:5090 &
+          set -euo pipefail
+          # --no-launch-profile and an explicit environment, matching main's
+          # copy. `dotnet run` otherwise applies launchSettings.json, which
+          # forces Development and OVERRIDES ASPNETCORE_ENVIRONMENT - so this
+          # check ran against a different configuration from the
+          # identically-named required check on main, while branch protection
+          # showed the same green name on both.
+          ASPNETCORE_ENVIRONMENT=Production dotnet run --project src/Lottery.Api --no-build --no-launch-profile --urls http://localhost:5090 &
           for i in $(seq 1 30); do
             curl -fsS http://localhost:5090/healthz && break
             sleep 2
           done
+          # The loop exits 0 even when the API never came up.
+          curl -fsS http://localhost:5090/healthz > /dev/null \
+            || { echo "::error::API did not become healthy within 60s."; exit 1; }
 
       - name: Smoke test (all endpoints incl. error conditions)
         shell: pwsh

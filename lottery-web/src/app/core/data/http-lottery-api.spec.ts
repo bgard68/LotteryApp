@@ -48,6 +48,22 @@ describe('HttpLotteryApi', () => {
       await promise;
     });
 
+    it('asks each game for its own next drawing', async () => {
+      const promise = api.nextDraw('megamillions');
+
+      const req = http.expectOne('/api/megamillions/next-draw');
+      expect(req.request.method).toBe('GET');
+      req.flush({
+        game: 'megamillions',
+        drawDate: '2026-07-28',
+        drawTimeUtc: '2026-07-28T02:59:00+00:00',
+        estimatedJackpot: 800_000_000,
+        cashValue: 344_200_000,
+      });
+
+      expect((await promise).estimatedJackpot).toBe(800_000_000);
+    });
+
     it('sends the ticket count as a parameter, not a hand-built string', async () => {
       const promise = api.generate('megamillions', 10);
 

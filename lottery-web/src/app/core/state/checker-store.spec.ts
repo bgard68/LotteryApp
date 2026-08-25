@@ -34,6 +34,13 @@ describe('CheckerStore', () => {
     expect(store.canCheck()).toBeFalse();
   });
 
+  it('a check with nothing to check never reaches the API', async () => {
+    await store.check();
+
+    expect(api.checkCalls).toEqual([]);
+    expect(store.results()).toBeNull();
+  });
+
   it('setCount clamps to 1-10 and preserves existing tickets', () => {
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     store.setCount(3);
@@ -52,6 +59,15 @@ describe('CheckerStore', () => {
     fillTicket(1, [1, 2, 3, 4, 70], 5);
     expect(store.validationError()).toContain('Ticket 2');
     expect(store.validationError()).toContain('between 1 and 69');
+    expect(store.canCheck()).toBeFalse();
+  });
+
+  it('rejects an out-of-era special ball naming the ticket', () => {
+    store.setCount(2);
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    fillTicket(1, [1, 2, 3, 4, 5], 27); // the era's special ball stops at 26
+    expect(store.validationError()).toContain('Ticket 2');
+    expect(store.validationError()).toContain('special ball must be between 1 and 26');
     expect(store.canCheck()).toBeFalse();
   });
 
@@ -116,6 +132,22 @@ describe('CheckerStore', () => {
     expect(store.results()![1]).toBeNull();
   });
 
+  // Validation only speaks for the CHECKMARKED tickets, so an unselected one
+  // can be complete and still illegal - it must be dropped here rather than
+  // sent for the API to reject.
+  it('skips an unselected ticket whose numbers repeat', async () => {
+    store.setCount(2);
+    fillTicket(0, [7, 19, 33, 51, 64], 18);
+    fillTicket(1, [5, 5, 6, 7, 8], 9);
+    store.toggleSelected(1);
+    expect(store.canCheck()).toBeTrue();
+
+    await store.check();
+
+    expect(api.checkCalls).toEqual([{ game: 'powerball', whites: [7, 19, 33, 51, 64], special: 18 }]);
+    expect(store.results()![1]).toBeNull();
+  });
+
   it('toggling a checkbox keeps existing results (view filter only)', async () => {
     store.setCount(2);
     fillTicket(0, [7, 19, 33, 51, 64], 18);
@@ -133,6 +165,12 @@ describe('CheckerStore', () => {
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     store.toggleSelected(0);
     expect(store.canCheck()).toBeFalse();
+  });
+
+  it('reports no selection for a ticket the count has since dropped', () => {
+    store.setCount(3);
+    store.setCount(1);
+    expect(store.isSelected(2)).toBeFalse();
   });
 
   it('pageSize defaults to 10 and accepts all', () => {
@@ -159,6 +197,43 @@ describe('CheckerStore', () => {
     api.generateError = new Error('boom');
     await store.generate();
     expect(store.error()).toContain('Something went wrong');
+  });
+
+  // The era drives client-side validation, so what happens when it is UNKNOWN
+  // matters: the server validates authoritatively, and a rules lookup that
+  // failed must not lock the user out of checking.
+  describe('when the rule eras are unknown', () => {
+    it('drops the old game\'s rules when the new game\'s lookup fails', async () => {
+      expect(store.era()?.whiteBallMax).toBe(69);
+      spyOn(api, 'ruleEras').and.rejectWith(new ApiUnreachableError());
+
+      await store.setGame('megamillions');
+
+      expect(store.era()).toBeNull();
+    });
+
+    it('treats an era list with no current era as unknown', async () => {
+      spyOn(api, 'ruleEras').and.resolveTo([
+        { effectiveFrom: '2013-10-19', whiteBallMax: 59, whiteBallCount: 5, specialBallMax: 35, isCurrent: false },
+      ]);
+
+      await store.setGame('megamillions');
+
+      expect(store.era()).toBeNull();
+    });
+
+    it('still lets the ticket be checked - the server has the last word', async () => {
+      spyOn(api, 'ruleEras').and.rejectWith(new ApiUnreachableError());
+      await store.setGame('megamillions');
+
+      fillTicket(0, [1, 2, 3, 4, 99], 99); // impossible under any real era
+      expect(store.validationError()).toBeNull();
+      expect(store.canCheck()).toBeTrue();
+
+      await store.check();
+
+      expect(api.checkCalls).toEqual([{ game: 'megamillions', whites: [1, 2, 3, 4, 99], special: 99 }]);
+    });
   });
 
   // The big-win threshold is a rule, and two consumers read it: the highlighted

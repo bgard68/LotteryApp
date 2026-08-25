@@ -39,6 +39,14 @@ jobs:
       - name: Install (locked)
         run: npm ci
 
+      # The npm tree lives only on this branch, and nothing was auditing it:
+      # dependency-review covers what a pull request ADDS, this covers what is
+      # already installed. Moderate matches the backend's NuGetAudit threshold
+      # and dependency-review's fail-on-severity, so one bar applies to both
+      # ecosystems.
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=moderate
+
       - name: Specs (ChromeHeadless)
         run: npx ng test --watch=false --browsers=ChromeHeadless
 
@@ -67,18 +75,28 @@ jobs:
 
       - name: Start API
         run: |
+          set -euo pipefail
           dotnet run --project src/Lottery.Api --urls http://localhost:5090 &
           for i in $(seq 1 30); do
             curl -fsS http://localhost:5090/healthz && break
             sleep 2
           done
+          # The loop exits 0 whether or not the API came up - the trailing
+          # sleep succeeds - so without this the next step fails on an
+          # unreachable URL and reports drift rather than a dead API.
+          curl -fsS http://localhost:5090/healthz > /dev/null \
+            || { echo "::error::API did not become healthy within 60s."; exit 1; }
 
       # Regenerate the committed TypeScript API types from the live OpenAPI
       # document and fail on any diff - the frontend can never quietly
       # disagree with the backend contract (decision D20).
       - name: Regenerate and diff
         run: |
-          npx --yes openapi-typescript http://localhost:5090/openapi/v1.json \
+          # Pinned. `npx --yes openapi-typescript` resolves `latest` from the
+          # registry and executes it, unreviewed, on every push and pull
+          # request - the one piece of unpinned remote code in a repo that
+          # otherwise SHA-pins every action and restores from lock files.
+          npx --yes openapi-typescript@7.13.0 http://localhost:5090/openapi/v1.json \
             -o lottery-web/src/app/core/api/schema.d.ts
           git diff --exit-code -- lottery-web/src/app/core/api/schema.d.ts \
             || { echo "::error::Generated API client is stale - regenerate schema.d.ts"; exit 1; }

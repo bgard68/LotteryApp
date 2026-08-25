@@ -1,0 +1,45 @@
+name: Dependency review
+
+# This branch's copy. For a pull request GitHub resolves the workflow from the
+# BASE branch, so main's copy never runs for a PR targeting frontend - and this
+# branch carries the entire npm tree and deploys to production. Without this
+# file, a PR here adding a vulnerable package was reviewed by nothing.
+#
+# Free on public repositories, and needs the dependency graph, which is on.
+
+on:
+  pull_request:
+    branches: [frontend]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # comment-summary-in-pr below needs this to post; without it the action
+      # degrades to a log warning and the summary silently never appears.
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Review the dependencies this pull request adds
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Kept in step with main's copy: moderate, because the package audits
+          # already fail the build at that level and a laxer gate would only
+          # defer the rejection to the next step.
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
