@@ -23,7 +23,7 @@ all 1,972 stored Powerball drawings.
 | Migrations | DbUp, embedded per-provider SQL scripts |
 | Database | SQLite - dev **and** production, on App Service's persistent `/home`. Azure SQL is supported and config-switched, but deliberately not provisioned ([what actually runs](docs/ARCHITECTURE.md#what-is-actually-running-in-azure)) |
 | Time | .NET `TimeProvider` ([why](#timeprovider-vs-idatetimeprovider)) |
-| Frontend | Angular 20 - lives on the **`frontend` branch** (`lottery-web/`), never merged into `main` |
+| Frontend | Angular 20 in `lottery-web/`. Deploys independently of the API - path filters decide, not branches |
 | Hosting | Azure Static Web Apps (frontend) + App Service (API) - **live**, $0/month |
 | Packages | Central Package Management (`Directory.Packages.props`) + committed lock files |
 
@@ -217,9 +217,11 @@ and failure modes: [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md). Summary:
 
 ## Workflows
 
-Full detail in [docs/workflows/README.md](docs/workflows/README.md). Each
-branch carries only the workflows that can actually run there - `main` and
-`frontend` are never merged, so each maintains its own set.
+Full detail in [docs/workflows/README.md](docs/workflows/README.md). One
+branch carries both halves, so there is one copy of each workflow. Path
+filters keep the two deployments independent: a change under `lottery-web/**`
+deploys the site and never the API, a change under `src/**` deploys the API
+and never the site, and a docs-only change builds and deploys nothing.
 
 **On `main`:** CI (build, tests, live smoke test), CodeQL (C#, built for full
 dataflow), gitleaks, era check (weekly - catches a real-world lottery rule

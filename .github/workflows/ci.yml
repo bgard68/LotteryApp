@@ -6,6 +6,16 @@ name: CI
 on:
   push:
     branches: [main]
+    # Documentation cannot break a build, so a docs-only push does not run
+    # one. Deliberately on `push` only: `pull_request` stays unfiltered because
+    # these are required status checks, and a required check that is SKIPPED
+    # never reports - leaving the pull request blocked forever rather than
+    # passing. ci-frontend.yml already documents the same reasoning.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "demo/**"
+      - "LICENSE"
   pull_request:
     branches: [main]
 
