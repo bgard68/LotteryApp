@@ -191,6 +191,24 @@ public class SocrataFeedTests
             () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
     }
 
+    [Theory]
+    // The row shape the feed publishes in the minutes AFTER a drawing, before
+    // the real numbers land. This is what took /internal/refresh to 500 in
+    // production: Draw.Create throws plain ArgumentException here, and an
+    // earlier version of this guard caught only ArgumentOutOfRangeException -
+    // its subclass - so the row sailed straight through.
+    [InlineData("""[{"draw_date":"2026-08-25T00:00:00.000","winning_numbers":"00 00 00 00 00 00"}]""")]
+    [InlineData("""[{"draw_date":"2026-08-25T00:00:00.000","winning_numbers":"07 07 33 51 64 18"}]""")]
+    public async Task APlaceholderRow_IsReportedAsAFeedError_NotThrownAtTheCaller(string body)
+    {
+        var feed = Feed(new StubHandler(body));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 8, 24), CancellationToken.None));
+
+        Assert.IsAssignableFrom<ArgumentException>(ex.InnerException);
+    }
+
     [Fact]
     public async Task NonNumericNumbers_RefuseTheBatch_AsAFeedError()
     {

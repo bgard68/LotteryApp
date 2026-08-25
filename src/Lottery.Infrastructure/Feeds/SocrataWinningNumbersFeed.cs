@@ -40,14 +40,20 @@ public sealed class SocrataWinningNumbersFeed : IWinningNumbersFeed
 
             return rows.Select(r => ToDraw(game, r)).ToList();
         }
-        // A malformed payload, or a row whose winning_numbers is short or
-        // non-numeric, otherwise escapes as JsonException / FormatException /
-        // ArgumentOutOfRangeException - none of which RefreshGame's catch
-        // filter matches, so one bad row 500s /internal/refresh rather than
-        // being reported as a feed error. Rethrown as the type the caller
-        // does handle, keeping the cause: the batch is still refused rather
-        // than silently delivered short.
-        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentOutOfRangeException)
+        // A malformed payload, or a row whose winning_numbers is short,
+        // non-numeric, or not five distinct balls, otherwise escapes as
+        // JsonException / FormatException / ArgumentException - none of which
+        // RefreshGame's catch filter matches, so one bad row 500s
+        // /internal/refresh rather than being reported as a feed error.
+        //
+        // ArgumentException rather than ArgumentOutOfRangeException: Draw.Create
+        // throws the BASE type for a row that is not five distinct balls, which
+        // is what the feed publishes in the minutes after a drawing. Catching
+        // only the derived type let exactly that case through.
+        //
+        // Rethrown as the type the caller does handle, keeping the cause: the
+        // batch is still refused rather than silently delivered short.
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
         {
             throw new InvalidOperationException(
                 $"Socrata feed returned an unusable payload: {ex.Message}", ex);

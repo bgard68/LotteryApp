@@ -53,7 +53,15 @@ public sealed class RefreshGame(
                         newDraws++;
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+            // ArgumentException included deliberately: EraValidator.Validate
+            // calls RuleEras.ForDate, which THROWS ArgumentOutOfRangeException
+            // for a draw dated before any known era rather than returning a
+            // violation. Without it a single bogus feed date escaped this
+            // method entirely, and /internal/refresh - which has no try/catch -
+            // answered 500. This class promises feed failures are reported,
+            // never thrown; a bad date is a feed failure like any other.
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                or InvalidOperationException or ArgumentException)
             {
                 feedError = ex.Message;
             }
