@@ -3,6 +3,8 @@
 Powerball and Mega Millions results, next-draw countdowns, number generation, and
 ticket checking against 24 years of real drawing history.
 
+**Live app: <https://thankful-grass-06c113f10.7.azurestaticapps.net/>**
+
 Not affiliated with MUSL, Powerball, or Mega Millions. Random picks are random -
 past drawings do not predict future ones. Verify any win with the official lottery.
 
@@ -23,7 +25,7 @@ all 1,972 stored Powerball drawings.
 | Migrations | DbUp, embedded per-provider SQL scripts |
 | Database | SQLite - dev **and** production, on App Service's persistent `/home`. Azure SQL is supported and config-switched, but deliberately not provisioned ([what actually runs](docs/ARCHITECTURE.md#what-is-actually-running-in-azure)) |
 | Time | .NET `TimeProvider` ([why](#timeprovider-vs-idatetimeprovider)) |
-| Frontend | Angular 20 in `lottery-web/`. Deploys independently of the API - path filters decide, not branches |
+| Frontend | Angular 22 in `lottery-web/`. Deploys independently of the API - path filters decide, not branches |
 | Hosting | Azure Static Web Apps (frontend) + App Service (API) - **live**, $0/month |
 | Packages | Central Package Management (`Directory.Packages.props`) + committed lock files |
 

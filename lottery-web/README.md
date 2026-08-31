@@ -1,6 +1,8 @@
 ﻿# lottery-web (the Angular frontend)
 
-Angular 20 dashboard: game cards with jackpots and live countdowns, last
+**Live app: <https://thankful-grass-06c113f10.7.azurestaticapps.net/>**
+
+Angular 22 dashboard: game cards with jackpots and live countdowns, last
 winning numbers, and the ticket checker. It lives alongside the API in this
 repository; the two deploy independently, decided by path filters rather than
 by living on separate branches.
