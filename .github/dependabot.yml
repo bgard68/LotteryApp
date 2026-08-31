@@ -49,3 +49,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # codeql-action/init and /analyze share a config file and refuse to run at
+      # different versions - "Loaded a configuration file for version X, but
+      # running version Y". Ungrouped, Dependabot proposes each half as its own
+      # PR and neither can merge alone: #133 and #137 both failed Analyze and
+      # were closed, and main reached 4.37.9 by hand instead. No update-types
+      # filter, because a major has to carry both halves too.
+      codeql-action:
+        patterns: ["github/codeql-action*"]
