@@ -1,0 +1,58 @@
+name: Dependabot config drift
+
+# Checks that Dependabot is actually applying .github/dependabot.yml.
+#
+# GitHub validates this file on any pull request that touches it and fails the
+# `.github/dependabot.yml` check with the offending property named, so an
+# invalid config cannot reach main through review unnoticed. What nothing
+# watches is the state afterwards: once a rejected config is on the default
+# branch, Dependabot silently falls back to the last version that parsed and
+# keeps running from it. The validator never re-runs, because it only fires on
+# pull requests that modify the file.
+#
+# The sibling repository WidgetWorks sat in exactly that state from 2026-08-07
+# to 2026-08-31. Every edit in between was inert, including a fix written to
+# stop codeql-action/init and /analyze arriving as separate, unmergeable pull
+# requests. That split recurred four Mondays running and was repaired by hand
+# each time, because the file on disk looked correct and nothing contradicted
+# it. This check exists so that state is noticed in days rather than weeks.
+#
+# Runs on a schedule rather than on pull requests deliberately: the evidence is
+# Dependabot's own output, which only exists after its weekly run.
+
+on:
+  schedule:
+    - cron: "23 15 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependabot-config-drift
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    name: Dependabot config drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Reads Dependabot's own pull requests to compare against the config.
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Nothing here pushes; keep the job token out of .git/config.
+          persist-credentials: false
+
+      - name: Install PyYAML
+        # Pinned for the same reason the actions above are pinned by SHA.
+        run: python -m pip install --quiet pyyaml==6.0.3
+
+      - name: Check that Dependabot is applying the config
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/check-dependabot-config.py
