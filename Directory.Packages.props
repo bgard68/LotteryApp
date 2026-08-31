@@ -10,7 +10,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
     <!-- Interactive API docs UI. .NET 9+ dropped Swashbuckle from the templates:
          AddOpenApi() serves the document only, with no UI. Scalar renders it. -->
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.1" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.2" />
     <!-- Transitive-vulnerability lifts: newer patched versions of packages pulled
          in by Microsoft.Data.Sqlite and Microsoft.AspNetCore.OpenApi. -->
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
