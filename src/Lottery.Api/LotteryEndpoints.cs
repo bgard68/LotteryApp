@@ -10,7 +10,9 @@ public static class LotteryEndpoints
     {
         // Root index: hitting the API's base URL in a browser should explain
         // what lives here rather than returning a bare 404.
-        app.MapGet("/", (IWebHostEnvironment env) => Results.Ok(new
+        // GET *and* HEAD: the keep-warm monitor and platform probes default to HEAD, and a
+        // root endpoint that answers 405 to the probe watching it cannot report bad news.
+        app.MapMethods("/", new[] { "GET", "HEAD" }, (IWebHostEnvironment env) => Results.Ok(new
         {
             name = "LotteryApp API",
             games = Enum.GetValues<Game>().Select(g => g.ToString().ToLowerInvariant()),
