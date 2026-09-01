@@ -1,0 +1,48 @@
+name: Keep API warm
+
+# BACKUP keep-warm. An external uptime monitor should be the PRIMARY ping; this workflow
+# is the fallback for when that monitor is down or its account lapses.
+#
+# Why it is not primary: GitHub's scheduler is best-effort and sheds high-frequency crons
+# under load, silently and with no skipped-run record. Observed 2026-09-01 across these
+# repositories: gaps of three to ten hours between runs of an every-10-minute schedule,
+# with GitHub Actions reporting no incident. The Free (F1) App Service instance unloads
+# after ~20 minutes idle, so a gap that long means a visitor pays a ~90s cold start.
+#
+# It pings the ROOT endpoint, which answers without querying the database, so it warms
+# the app without burning database resources.
+#
+# Notes:
+#   - Uses the repo Variable API_BASE_URL (Settings > Secrets and variables > Actions).
+#   - Free Actions minutes are unlimited on PUBLIC repositories.
+#   - Manual "wake it now" run before you expect traffic: gh workflow run keep-warm.yml
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'   # roughly every 10 minutes; GitHub gives no timing guarantee
+  workflow_dispatch:
+
+concurrency:
+  group: keep-warm
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the API root (warms the app, no DB hit)
+        env:
+          API_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "API_BASE_URL is not set — skipping."
+            exit 0
+          fi
+          url="${API_URL%/}/"
+          echo "Pinging $url"
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 90 --retry 3 --retry-all-errors "$url" || echo "000")
+          echo "HTTP $code"
+          if [ "$code" = "000" ]; then echo "::warning::No response from $url (still waking, or unreachable)."; fi
