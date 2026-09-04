@@ -1,7 +1,7 @@
 ﻿# LotteryApp
 
 Powerball and Mega Millions results, next-draw countdowns, number generation, and
-ticket checking against 24 years of real drawing history.
+ticket checking against every recorded drawing back to 2002.
 
 **Live app: <https://thankful-grass-06c113f10.7.azurestaticapps.net/>**
 
@@ -225,18 +225,15 @@ filters keep the two deployments independent: a change under `lottery-web/**`
 deploys the site and never the API, a change under `src/**` deploys the API
 and never the site, and a docs-only change builds and deploys nothing.
 
-**On `main`:** CI (build, tests, live smoke test), CodeQL (C#, built for full
-dataflow), gitleaks, era check (weekly - catches a real-world lottery rule
-change), keep-alive (draw-time pings, since F1 has no Always On), cleanup
-(prunes old runs by count), and **Deploy API** - automatic on backend changes,
-gated by the smoke test.
+**On `main`:** CI (build, tests, live smoke test), CI frontend (specs, build,
+OpenAPI client drift check), CodeQL (C# built for full dataflow, and
+JavaScript/TypeScript), gitleaks, era check (weekly - catches a real-world
+lottery rule change), keep-alive (draw-time pings, since F1 has no Always On),
+cleanup (prunes old runs by count), **Deploy API** - automatic on backend
+changes, gated by the smoke test - and **Deploy frontend** - automatic on
+`lottery-web/**` changes.
 
-**On `frontend`:** CI, CI frontend (specs, build, OpenAPI client drift check),
-CodeQL (JavaScript/TypeScript), gitleaks, and **Deploy frontend** - automatic
-on `lottery-web/**` changes.
-
-**Repo-wide:** Dependabot (weekly NuGet, npm and Actions updates across both
-branches).
+**Repo-wide:** Dependabot (weekly NuGet, npm and Actions updates).
 
 ## Deploying to Azure
 
@@ -257,11 +254,10 @@ In short:
 - **Secret scanning + push protection** - a pushed credential is blocked before
   it lands in history.
 - **Dependabot alerts + security updates + weekly version updates** - NuGet,
-  npm, and GitHub Actions, across **both** branches (the frontend entries
-  declare `target-branch`, since Dependabot reads config only from `main`).
-- **CodeQL** with the `security-extended` suite - C# on `main` built for full
-  dataflow fidelity, JavaScript/TypeScript on `frontend`.
-- **Branch protection** on both branches - PR required, CI required green,
+  npm, and GitHub Actions, all from the single config on `main`.
+- **CodeQL** with the `security-extended` suite - C# built for full dataflow
+  fidelity, plus JavaScript/TypeScript.
+- **Branch protection** on `main` - PR required, CI required green,
   force-pushes and deletions blocked.
 - **Private vulnerability reporting** enabled, matching what
   [SECURITY.md](SECURITY.md) promises.
