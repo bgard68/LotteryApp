@@ -6,6 +6,7 @@
     <Project Path="src/Lottery.Infrastructure/Lottery.Infrastructure.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Lottery.Api.Tests/Lottery.Api.Tests.csproj" />
     <Project Path="tests/Lottery.Application.Tests/Lottery.Application.Tests.csproj" />
     <Project Path="tests/Lottery.Domain.Tests/Lottery.Domain.Tests.csproj" />
     <Project Path="tests/Lottery.Infrastructure.Tests/Lottery.Infrastructure.Tests.csproj" />
