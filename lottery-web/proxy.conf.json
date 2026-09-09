@@ -1,0 +1,5 @@
+{
+  "/api": { "target": "http://localhost:5090", "secure": false },
+  "/healthz": { "target": "http://localhost:5090", "secure": false },
+  "/internal": { "target": "http://localhost:5090", "secure": false }
+}

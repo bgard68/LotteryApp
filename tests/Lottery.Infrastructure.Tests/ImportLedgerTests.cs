@@ -5,9 +5,10 @@ using Lottery.Infrastructure.Persistence;
 namespace Lottery.Infrastructure.Tests;
 
 /// <summary>
-/// The ledger is the only guard against re-running the 4,500-row seed on every
-/// boot, so its round-trip fidelity - including the timestamp's offset - is
-/// load-bearing. Real SQLite, same as the other repository tests.
+/// The ledger is what stops the one-time history import from running twice, so
+/// the round trip has to be exact: every field goes through the database as a
+/// string and comes back parsed. Real SQLite (temp file, migrated by DbUp) -
+/// with Dapper the SQL is the logic.
 /// </summary>
 public sealed class ImportLedgerTests : IDisposable
 {
@@ -29,41 +30,77 @@ public sealed class ImportLedgerTests : IDisposable
         if (File.Exists(_dbPath)) File.Delete(_dbPath);
     }
 
+    private static readonly ImportRecord PowerballImport = new(
+        Game.Powerball,
+        "snapshot:data.ny.gov",
+        new DateTimeOffset(2026, 7, 27, 12, 34, 56, 789, TimeSpan.Zero),
+        1978,
+        new DateOnly(2010, 2, 3),
+        new DateOnly(2026, 7, 25));
+
     [Fact]
     public async Task Record_ThenGet_RoundTripsEveryField()
     {
-        // Non-UTC offset on purpose: the "O" format must preserve it exactly.
-        var record = new ImportRecord(Game.Powerball, "snapshot:data.ny.gov",
-            new DateTimeOffset(2026, 7, 27, 14, 0, 0, TimeSpan.FromHours(2)),
-            1971, new DateOnly(2010, 2, 3), new DateOnly(2026, 7, 25));
+        await _ledger.RecordAsync(PowerballImport, CancellationToken.None);
 
-        await _ledger.RecordAsync(record, CancellationToken.None);
         var loaded = await _ledger.GetAsync(Game.Powerball, CancellationToken.None);
 
-        Assert.Equal(record, loaded);
-        Assert.Equal(TimeSpan.FromHours(2), loaded!.CompletedAtUtc.Offset);
+        Assert.Equal(PowerballImport, loaded);
     }
 
     [Fact]
-    public async Task Get_UnrecordedGame_ReturnsNull()
+    public async Task CompletedAt_KeepsSubSecondPrecision()
     {
+        // Stored round-trip format ("O"); a coarser format would make repeated
+        // imports on the same day indistinguishable.
+        await _ledger.RecordAsync(PowerballImport, CancellationToken.None);
+
+        var loaded = await _ledger.GetAsync(Game.Powerball, CancellationToken.None);
+
+        Assert.Equal(PowerballImport.CompletedAtUtc, loaded!.CompletedAtUtc);
+        Assert.Equal(789, loaded.CompletedAtUtc.Millisecond);
+    }
+
+    [Fact]
+    public async Task Get_ForAGameNeverImported_IsNull()
+    {
+        Assert.Null(await _ledger.GetAsync(Game.Powerball, CancellationToken.None));
+
+        await _ledger.RecordAsync(PowerballImport, CancellationToken.None);
+
+        // One game's import must never look like the other's.
         Assert.Null(await _ledger.GetAsync(Game.MegaMillions, CancellationToken.None));
     }
 
     [Fact]
-    public async Task Records_AreIsolatedPerGame()
+    public async Task EachGame_KeepsItsOwnRecord()
     {
-        var powerball = new ImportRecord(Game.Powerball, "snapshot:data.ny.gov",
-            new DateTimeOffset(2026, 7, 27, 12, 0, 0, TimeSpan.Zero),
-            1971, new DateOnly(2010, 2, 3), new DateOnly(2026, 7, 25));
-        var megaMillions = new ImportRecord(Game.MegaMillions, "snapshot:data.ny.gov",
-            new DateTimeOffset(2026, 7, 27, 12, 5, 0, TimeSpan.Zero),
-            2522, new DateOnly(2002, 5, 17), new DateOnly(2026, 7, 24));
+        var megaMillions = PowerballImport with
+        {
+            Game = Game.MegaMillions,
+            Source = "socrata:5xaw-6ayf",
+            DrawCount = 2431,
+        };
 
-        await _ledger.RecordAsync(powerball, CancellationToken.None);
+        await _ledger.RecordAsync(PowerballImport, CancellationToken.None);
         await _ledger.RecordAsync(megaMillions, CancellationToken.None);
 
-        Assert.Equal(powerball, await _ledger.GetAsync(Game.Powerball, CancellationToken.None));
+        Assert.Equal(PowerballImport, await _ledger.GetAsync(Game.Powerball, CancellationToken.None));
         Assert.Equal(megaMillions, await _ledger.GetAsync(Game.MegaMillions, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RecordingAGameTwice_IsRejectedByThePrimaryKey()
+    {
+        // Game is the primary key: the ledger holds one row per game, and a
+        // second import attempt must fail loudly rather than append a duplicate
+        // that would make "have we imported this?" ambiguous.
+        await _ledger.RecordAsync(PowerballImport, CancellationToken.None);
+
+        await Assert.ThrowsAsync<Microsoft.Data.Sqlite.SqliteException>(
+            () => _ledger.RecordAsync(PowerballImport with { DrawCount = 9999 }, CancellationToken.None));
+
+        var loaded = await _ledger.GetAsync(Game.Powerball, CancellationToken.None);
+        Assert.Equal(1978, loaded!.DrawCount);
     }
 }

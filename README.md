@@ -1,7 +1,9 @@
 ﻿# LotteryApp
 
 Powerball and Mega Millions results, next-draw countdowns, number generation, and
-ticket checking against 24 years of real drawing history.
+ticket checking against every recorded drawing back to 2002.
+
+**Live app: <https://thankful-grass-06c113f10.7.azurestaticapps.net/>**
 
 Not affiliated with MUSL, Powerball, or Mega Millions. Random picks are random -
 past drawings do not predict future ones. Verify any win with the official lottery.
@@ -23,7 +25,7 @@ all 1,972 stored Powerball drawings.
 | Migrations | DbUp, embedded per-provider SQL scripts |
 | Database | SQLite - dev **and** production, on App Service's persistent `/home`. Azure SQL is supported and config-switched, but deliberately not provisioned ([what actually runs](docs/ARCHITECTURE.md#what-is-actually-running-in-azure)) |
 | Time | .NET `TimeProvider` ([why](#timeprovider-vs-idatetimeprovider)) |
-| Frontend | Angular 20 - lives on the **`frontend` branch** (`lottery-web/`), never merged into `main` |
+| Frontend | Angular 22 in `lottery-web/`. Deploys independently of the API - path filters decide, not branches |
 | Hosting | Azure Static Web Apps (frontend) + App Service (API) - **live**, $0/month |
 | Packages | Central Package Management (`Directory.Packages.props`) + committed lock files |
 
@@ -47,7 +49,7 @@ order matters, the background refresh, and what is actually provisioned in Azure
 - **[Application](src/Lottery.Application/README.md)** - use cases and the port interfaces (`IDrawRepository`, `IHistorySource`, ...) that Infrastructure implements.
 - **[Infrastructure](src/Lottery.Infrastructure/README.md)** - Dapper repositories, connection factories, DbUp migrations, history seeding.
 - **[Api](src/Lottery.Api/README.md)** - the composition root: minimal API endpoints, DI wiring, health checks, rate limiting.
-- **[Tests](tests/README.md)** - 281 tests across all layers, including an in-process API suite; [scripts](scripts/README.md) holds the PowerShell smoke test.
+- **[Tests](tests/README.md)** - 378 tests across all layers, including an in-process API suite; [scripts](scripts/README.md) holds the PowerShell smoke test.
 
 SOLID throughout: one reason to change per class (SRP), ports owned by the layer
 that uses them (DIP), new adapters instead of edited use cases (OCP), and no
@@ -217,22 +219,21 @@ and failure modes: [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md). Summary:
 
 ## Workflows
 
-Full detail in [docs/workflows/README.md](docs/workflows/README.md). Each
-branch carries only the workflows that can actually run there - `main` and
-`frontend` are never merged, so each maintains its own set.
+Full detail in [docs/workflows/README.md](docs/workflows/README.md). One
+branch carries both halves, so there is one copy of each workflow. Path
+filters keep the two deployments independent: a change under `lottery-web/**`
+deploys the site and never the API, a change under `src/**` deploys the API
+and never the site, and a docs-only change builds and deploys nothing.
 
-**On `main`:** CI (build, tests, live smoke test), CodeQL (C#, built for full
-dataflow), gitleaks, era check (weekly - catches a real-world lottery rule
-change), keep-alive (draw-time pings, since F1 has no Always On), cleanup
-(prunes old runs by count), and **Deploy API** - automatic on backend changes,
-gated by the smoke test.
+**On `main`:** CI (build, tests, live smoke test), CI frontend (specs, build,
+OpenAPI client drift check), CodeQL (C# built for full dataflow, and
+JavaScript/TypeScript), gitleaks, era check (weekly - catches a real-world
+lottery rule change), keep-alive (draw-time pings, since F1 has no Always On),
+cleanup (prunes old runs by count), **Deploy API** - automatic on backend
+changes, gated by the smoke test - and **Deploy frontend** - automatic on
+`lottery-web/**` changes.
 
-**On `frontend`:** CI, CI frontend (specs, build, OpenAPI client drift check),
-CodeQL (JavaScript/TypeScript), gitleaks, and **Deploy frontend** - automatic
-on `lottery-web/**` changes.
-
-**Repo-wide:** Dependabot (weekly NuGet, npm and Actions updates across both
-branches).
+**Repo-wide:** Dependabot (weekly NuGet, npm and Actions updates).
 
 ## Deploying to Azure
 
@@ -253,11 +254,10 @@ In short:
 - **Secret scanning + push protection** - a pushed credential is blocked before
   it lands in history.
 - **Dependabot alerts + security updates + weekly version updates** - NuGet,
-  npm, and GitHub Actions, across **both** branches (the frontend entries
-  declare `target-branch`, since Dependabot reads config only from `main`).
-- **CodeQL** with the `security-extended` suite - C# on `main` built for full
-  dataflow fidelity, JavaScript/TypeScript on `frontend`.
-- **Branch protection** on both branches - PR required, CI required green,
+  npm, and GitHub Actions, all from the single config on `main`.
+- **CodeQL** with the `security-extended` suite - C# built for full dataflow
+  fidelity, plus JavaScript/TypeScript.
+- **Branch protection** on `main` - PR required, CI required green,
   force-pushes and deletions blocked.
 - **Private vulnerability reporting** enabled, matching what
   [SECURITY.md](SECURITY.md) promises.
@@ -342,7 +342,7 @@ pwsh scripts/smoke-test.ps1 -BaseUrl http://localhost:5000
 dotnet test
 ```
 
-281 tests, all layers - including DST-boundary schedule tests driven by
+378 tests, all layers - including DST-boundary schedule tests driven by
 `FakeTimeProvider`, an **era-coverage test** that validates all 4,493
 historical draws against the rule-era table, feed contract tests against
 recorded real payloads, and an **in-process API suite** that boots the real

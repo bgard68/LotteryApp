@@ -19,6 +19,12 @@ on:
 permissions:
   contents: read
 
+# A push that supersedes an in-flight run makes that run's verdict irrelevant.
+# Cancelling frees the queue instead of leaving work for cleanup-runs to prune.
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   scan:
     name: gitleaks

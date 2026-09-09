@@ -23,8 +23,10 @@ on:
         default: "2"
         required: false
 
+# Read-only by default. The write this workflow needs is requested by the one
+# job that needs it, so a job added later starts from no privilege rather than
+# inheriting the ability to delete runs.
 permissions:
-  actions: write # deleting runs is a write to the Actions API
   contents: read
 
 jobs:
@@ -32,6 +34,11 @@ jobs:
     name: Prune old runs
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      # Deleting a run is a write to the Actions API, and there is no narrower
+      # scope that permits it - so it is granted here rather than workflow-wide.
+      actions: write
+      contents: read
     steps:
       - name: Delete superseded runs
         env:
@@ -42,6 +49,17 @@ jobs:
           THIS_RUN: ${{ github.run_id }}
         run: |
           set -euo pipefail
+
+          # These reach $(( )) below, which evaluates array subscripts and so
+          # can execute a command substitution embedded in the value. The
+          # inputs come from workflow_dispatch, not from a fork, but a token
+          # scoped to actions:write alone should not be able to reach a shell.
+          for v in "$KEEP" "$KEEP_DEPLOY"; do
+            case "$v" in
+              ''|*[!0-9]*) echo "::error::Retention inputs must be non-negative integers."; exit 1 ;;
+            esac
+          done
+
           deleted=0
           kept=0
 

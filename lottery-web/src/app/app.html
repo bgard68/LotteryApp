@@ -1,0 +1,43 @@
+<main [class.tabbed]="viewport.isMobile()">
+  <header class="masthead">
+    <h1>Lucky numbers</h1>
+    <p class="muted">Powerball &amp; Mega Millions results, countdowns, and ticket checking</p>
+  </header>
+
+  @if (showGames()) {
+    <div class="cards">
+      @for (card of dashboard.cards(); track card.meta.game) {
+        <app-game-card [view]="card" />
+      }
+    </div>
+  }
+
+  @if (showChecker()) {
+    <app-ticket-checker [section]="checkerSection()" />
+  }
+
+  <footer>
+    <p>
+      Random picks are random - past drawings do not predict future ones.
+      This site is not affiliated with MUSL, Powerball, or Mega Millions.
+      If you believe you hold a winning ticket, verify it with the official lottery.
+    </p>
+  </footer>
+</main>
+
+@if (viewport.isMobile()) {
+  <nav class="tabbar" aria-label="Sections">
+    <button type="button" (click)="selectTab('games')" [attr.aria-current]="tab() === 'games' ? 'page' : null">
+      Games
+    </button>
+    <button type="button" (click)="selectTab('tickets')" [attr.aria-current]="tab() === 'tickets' ? 'page' : null">
+      Tickets
+    </button>
+    <button type="button" (click)="selectTab('wins')" [attr.aria-current]="tab() === 'wins' ? 'page' : null">
+      Wins
+      @if (winCount() > 0) {
+        <span class="badge" [attr.aria-label]="winCount() + ' big wins'">{{ winCount() }}</span>
+      }
+    </button>
+  </nav>
+}

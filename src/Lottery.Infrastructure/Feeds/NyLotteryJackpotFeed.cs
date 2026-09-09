@@ -39,24 +39,40 @@ public sealed class NyLotteryJackpotFeed(HttpClient http) : IJackpotFeed
             return null;
         }
 
-        // The upcoming draw is the entry that carries jackpot figures.
+        // The upcoming draw is the entry that carries jackpot figures - but only
+        // once they have been ANNOUNCED. In the minutes after a drawing the next
+        // entry is published with zeros, and `is not null` accepted those: the
+        // site showed "Estimated jackpot $0" until the next refresh, because a
+        // zero is also non-null on the way into the store.
+        //
+        // No lottery jackpot is zero - Powerball's floor is $20 million - so a
+        // non-positive figure means "not announced yet", never a real amount.
+        // Treating it as absent lets the stored estimate stand until the real
+        // number lands, which is what the card should keep showing.
         var upcoming = payload?.Data?.Draws?
-            .Where(d => d.EstimatedJackpot is not null || d.Jackpots is { Count: > 0 })
+            .Where(d => Announced(d.EstimatedJackpot) is not null
+                || d.Jackpots?.Any(j => Announced(j.Amount) is not null) == true)
             .OrderByDescending(d => d.DrawTime)
             .FirstOrDefault();
 
         if (upcoming is null)
             return null;
 
-        var jackpot = upcoming.Jackpots?.FirstOrDefault();
+        var jackpot = upcoming.Jackpots?.FirstOrDefault(j => Announced(j.Amount) is not null)
+            ?? upcoming.Jackpots?.FirstOrDefault();
+
         return new JackpotInfo(
             game,
             LastDrawDate: null,
             LastJackpot: null,
             LastJackpotWon: null,
-            NextEstimatedJackpot: upcoming.EstimatedJackpot ?? jackpot?.Amount,
-            NextCashValue: jackpot?.CashAmount);
+            NextEstimatedJackpot: Announced(upcoming.EstimatedJackpot) ?? Announced(jackpot?.Amount),
+            NextCashValue: Announced(jackpot?.CashAmount));
     }
+
+    /// <summary>A figure the source has actually announced, or null. Zero and
+    /// negatives are placeholders the feed publishes before a jackpot is set.</summary>
+    private static decimal? Announced(decimal? amount) => amount is > 0 ? amount : null;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 

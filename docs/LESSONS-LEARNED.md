@@ -792,10 +792,14 @@ powerball.com adapters both wrap their parsing in defensive catches; the Mega
 Millions adapter - the one whose source had never yet misbehaved - was the one
 of three without a guard.
 
-**Fix:** the parse is wrapped in
-`catch (Exception ex) when (ex is XmlException or JsonException)` returning
-null, with two regression tests (`NonXmlBody_DegradesToNull`,
-`MalformedJsonInsideTheXml_DegradesToNull`) planting each malformed shape.
+**Fix:** the parse is wrapped in a
+`when (ex is HttpRequestException or XmlException or JsonException)` filter
+returning null, with regression tests in `FeedParsingTests`
+(`MegaMillions_NonXmlBody_DegradesToNull`,
+`MegaMillions_BodyThatIsNotJson_DegradesToNull`) planting each malformed
+shape. Two parallel branches found and fixed this bug independently in the
+same week - converging on the same guard is decent evidence it is the right
+one.
 **Lesson:** a documented failure-mode promise is a test obligation - every
 input the doc claims to survive gets planted in a test, or the promise is
 prose. And when several adapters share a contract, diff them against each
@@ -826,13 +830,25 @@ connection string - which `appsettings.Development.json` would out-rank in
 either mechanism - is redirected at the service seam instead
 (`RemoveAll<IDbConnectionFactory>` + the real `SqliteConnectionFactory` and
 `DatabaseInitializer` pointed at the temp file). A sentinel test
-(`Host_UsesTheTestDatabaseFile_NotTheDevDefault`) asserts the API actually
-wrote the temp database.
+(`LotteryApiFactoryTests`) asserts the API actually wrote the temp database.
 **Lesson:** when overriding test-host config, know which epoch each key is
 read in - and put a sentinel test on the override itself. A silently ignored
 override is the worst kind of green: these tests ran against a freshly seeded
 *default* database with identical data, so everything but four tests passed
 while testing the wrong thing.
+
+**Postscript: the same trap, found again at merge time.** A parallel branch
+built its own `WebApplicationFactory` for the same API in the same week, with
+the database override supplied purely through `ConfigureAppConfiguration` -
+and every one of its tests was green. After merging the two suites, a stray
+`lottery.db` in the test bin gave it away: that factory's override had been
+silently ignored all along, every test class had been sharing one
+default-path database, and the per-factory "throwaway file" cleanup was
+deleting a file that never existed. The service-seam redirect plus the
+sentinel test now guard the merged factory. Exactly as lesson 28 found in CI:
+knowing about a trap is not the same as having removed it from every place it
+exists - and a green suite is no evidence either way, which is what makes the
+sentinel worth its two lines.
 
 ## 32. The spoofing test failed - and falsified the comment it was written from
 

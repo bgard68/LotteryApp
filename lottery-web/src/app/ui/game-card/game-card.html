@@ -1,0 +1,55 @@
+<section class="card" [class]="view().meta.accentClass">
+  <header>
+    <h2>{{ view().meta.name }}</h2>
+    <span class="schedule">{{ view().meta.scheduleLabel }}</span>
+  </header>
+
+  @if (view().error) {
+    <p class="error">{{ view().error }}</p>
+  } @else if (!view().loaded) {
+    <p class="muted">Loading…</p>
+  } @else {
+    <div class="next">
+      @if (jackpot()) {
+        <p class="label">Estimated jackpot</p>
+        <p class="amount">{{ jackpot() }}</p>
+        @if (cashValue()) {
+          <p class="cash">Cash value {{ cashValue() }}</p>
+        }
+      }
+      @if (view().next; as next) {
+        <div class="when">
+          <span class="label">Next drawing · {{ next.drawDate + 'T12:00:00' | date: 'EEE, MMM d' }}</span>
+          @if (countdownText()) {
+            <span class="countdown">{{ countdownText() }}</span>
+          }
+        </div>
+      }
+    </div>
+
+    @if (view().latest; as latest) {
+      <div class="latest">
+        <div class="latest-head">
+          <span class="label">
+            Last drawing · {{ latest.drawDate + 'T12:00:00' | date: 'EEE, MMM d' }}
+          </span>
+          @if (lastJackpot()) {
+            <span class="label">
+              {{ lastJackpot() }} ·
+              @if (latest.jackpotWon === false) { rolled over }
+              @else if (latest.jackpotWon === true) { jackpot won }
+            </span>
+          }
+        </div>
+        @if (latest.status === 'Published' && latest.whiteBalls && latest.special != null) {
+          <app-number-balls
+            [whites]="latest.whiteBalls"
+            [special]="latest.special"
+            [accent]="view().meta.accentClass" />
+        } @else {
+          <p class="muted">Results pending…</p>
+        }
+      </div>
+    }
+  }
+</section>

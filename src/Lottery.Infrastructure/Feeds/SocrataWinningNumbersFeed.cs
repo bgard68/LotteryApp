@@ -32,11 +32,32 @@ public sealed class SocrataWinningNumbersFeed : IWinningNumbersFeed
         var where = Uri.EscapeDataString($"draw_date > '{after:yyyy-MM-dd}T23:59:59'");
         var url = $"resource/{dataset}.json?$where={where}&$order=draw_date&$limit=200";
 
-        using var stream = await _http.GetStreamAsync(url, ct);
-        var rows = await JsonSerializer.DeserializeAsync<List<SocrataRow>>(stream, JsonOptions, ct)
-            ?? throw new InvalidOperationException("Socrata feed returned null.");
+        try
+        {
+            using var stream = await _http.GetStreamAsync(url, ct);
+            var rows = await JsonSerializer.DeserializeAsync<List<SocrataRow>>(stream, JsonOptions, ct)
+                ?? throw new InvalidOperationException("Socrata feed returned null.");
 
-        return rows.Select(r => ToDraw(game, r)).ToList();
+            return rows.Select(r => ToDraw(game, r)).ToList();
+        }
+        // A malformed payload, or a row whose winning_numbers is short,
+        // non-numeric, or not five distinct balls, otherwise escapes as
+        // JsonException / FormatException / ArgumentException - none of which
+        // RefreshGame's catch filter matches, so one bad row 500s
+        // /internal/refresh rather than being reported as a feed error.
+        //
+        // ArgumentException rather than ArgumentOutOfRangeException: Draw.Create
+        // throws the BASE type for a row that is not five distinct balls, which
+        // is what the feed publishes in the minutes after a drawing. Catching
+        // only the derived type let exactly that case through.
+        //
+        // Rethrown as the type the caller does handle, keeping the cause: the
+        // batch is still refused rather than silently delivered short.
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
+        {
+            throw new InvalidOperationException(
+                $"Socrata feed returned an unusable payload: {ex.Message}", ex);
+        }
     }
 
     private static Draw ToDraw(Game game, SocrataRow row)

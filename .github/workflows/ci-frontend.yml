@@ -1,0 +1,101 @@
+name: CI frontend
+
+# The Angular app lives in lottery-web/. Pushes are path-filtered to save
+# runner time; pull requests are NOT - a required status check that is skipped
+# leaves the PR blocked on a check that will never report.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lottery-web/**"
+      - ".github/workflows/ci-frontend.yml"
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Angular build + specs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: lottery-web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Nothing here pushes, so the job token has no use after the clone.
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: lottery-web/package-lock.json
+
+      - name: Install (locked)
+        run: npm ci
+
+      # The npm tree lives only on this branch, and nothing was auditing it:
+      # dependency-review covers what a pull request ADDS, this covers what is
+      # already installed. Moderate matches the backend's NuGetAudit threshold
+      # and dependency-review's fail-on-severity, so one bar applies to both
+      # ecosystems.
+      - name: Audit npm dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Specs (ChromeHeadless)
+        run: npx ng test --watch=false --browsers=ChromeHeadless
+
+      - name: Production build
+        run: npx ng build
+
+      # Against the BUILT output, not the source tree: the config only reaches
+      # Azure if the asset pipeline copies it, and a site with no CSP works
+      # perfectly - nothing else in the suite would notice it had gone.
+      - name: Security headers ship with the build
+        run: npm run check:swa
+
+  client-drift:
+    name: OpenAPI client drift check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Nothing here pushes, so the job token has no use after the clone.
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          global-json-file: global.json
+
+      - name: Start API
+        run: |
+          set -euo pipefail
+          dotnet run --project src/Lottery.Api --urls http://localhost:5090 &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:5090/healthz && break
+            sleep 2
+          done
+          # The loop exits 0 whether or not the API came up - the trailing
+          # sleep succeeds - so without this the next step fails on an
+          # unreachable URL and reports drift rather than a dead API.
+          curl -fsS http://localhost:5090/healthz > /dev/null \
+            || { echo "::error::API did not become healthy within 60s."; exit 1; }
+
+      # Regenerate the committed TypeScript API types from the live OpenAPI
+      # document and fail on any diff - the frontend can never quietly
+      # disagree with the backend contract (decision D20).
+      - name: Regenerate and diff
+        run: |
+          # Pinned. `npx --yes openapi-typescript` resolves `latest` from the
+          # registry and executes it, unreviewed, on every push and pull
+          # request - the one piece of unpinned remote code in a repo that
+          # otherwise SHA-pins every action and restores from lock files.
+          npx --yes openapi-typescript@7.13.0 http://localhost:5090/openapi/v1.json \
+            -o lottery-web/src/app/core/api/schema.d.ts
+          git diff --exit-code -- lottery-web/src/app/core/api/schema.d.ts \
+            || { echo "::error::Generated API client is stale - regenerate schema.d.ts"; exit 1; }

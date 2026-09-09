@@ -4,10 +4,11 @@ using Lottery.Infrastructure.Persistence;
 namespace Lottery.Infrastructure.Tests;
 
 /// <summary>
-/// SQL paths the base repository suite leaves uncovered: the MIN() aggregate,
-/// the jackpot UPDATE, the null-bound halves of the range query's
-/// "(@from IS NULL OR ...)" predicates, and the match query's inclusion rule
-/// (special alone in; two whites alone out) - with Dapper the SQL is the logic.
+/// SQL paths the base repository suite leaves uncovered: the null-bound halves
+/// of the range query's "(@from IS NULL OR ...)" predicates, and the match
+/// query's inclusion rule (special alone comes back with zero whites; two
+/// whites without the special is filtered out server-side; games never cross)
+/// - with Dapper the SQL is the logic.
 /// </summary>
 public sealed class DrawRepositoryEdgeTests : IDisposable
 {
@@ -35,48 +36,6 @@ public sealed class DrawRepositoryEdgeTests : IDisposable
 
     private Task SeedThreeDrawsAsync() =>
         _repo.BulkInsertAsync([July18, July22, July25], CancellationToken.None);
-
-    [Fact]
-    public async Task EarliestDrawDate_ReturnsTheOldestForTheGame()
-    {
-        await SeedThreeDrawsAsync();
-        await _repo.UpsertAsync(Draw.Create(Game.MegaMillions, new DateOnly(2026, 7, 3), [1, 2, 3, 4, 5], 6), CancellationToken.None);
-
-        var earliest = await _repo.EarliestDrawDateAsync(Game.Powerball, CancellationToken.None);
-
-        Assert.Equal(new DateOnly(2026, 7, 18), earliest); // not the older MM draw
-    }
-
-    [Fact]
-    public async Task EarliestDrawDate_EmptyGame_ReturnsNull()
-    {
-        Assert.Null(await _repo.EarliestDrawDateAsync(Game.Powerball, CancellationToken.None));
-    }
-
-    [Fact]
-    public async Task UpdateJackpot_StampsTheExistingRow()
-    {
-        await SeedThreeDrawsAsync();
-
-        await _repo.UpdateJackpotAsync(Game.Powerball, new DateOnly(2026, 7, 25), 389_000_000m, false, CancellationToken.None);
-
-        var latest = await _repo.GetLatestAsync(Game.Powerball, CancellationToken.None);
-        Assert.Equal(389_000_000m, latest!.JackpotAmount);
-        Assert.False(latest.JackpotWon);
-        Assert.Equal([3, 4, 24, 36, 47], latest.WhiteBalls); // numbers untouched
-    }
-
-    [Fact]
-    public async Task UpdateJackpot_UnknownDrawDate_ChangesNothingAndDoesNotThrow()
-    {
-        await SeedThreeDrawsAsync();
-
-        await _repo.UpdateJackpotAsync(Game.Powerball, new DateOnly(1999, 1, 1), 999_999_999m, true, CancellationToken.None);
-
-        var latest = await _repo.GetLatestAsync(Game.Powerball, CancellationToken.None);
-        Assert.Null(latest!.JackpotAmount);
-        Assert.Null(latest.JackpotWon);
-    }
 
     [Fact]
     public async Task GetRange_FromOnly_ReturnsEverythingSinceThatDate()

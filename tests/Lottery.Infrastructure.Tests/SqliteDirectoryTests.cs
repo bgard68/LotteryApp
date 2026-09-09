@@ -52,10 +52,27 @@ public sealed class SqliteDirectoryTests : IDisposable
 
     [Theory]
     [InlineData("Data Source=:memory:")]
+    [InlineData("Data Source=:MEMORY:")]                     // the check is case-insensitive
+    [InlineData("Data Source=file::memory:?cache=shared")]   // shared in-memory form
+    [InlineData("Data Source=")]                             // empty data source
     [InlineData("Data Source=lottery.db")] // relative: no directory component
     public void Handles_paths_with_no_directory_to_create(string connectionString)
     {
         // Must not throw while trying to create a directory that isn't there.
         SqliteConnectionFactory.EnsureDirectoryExists(connectionString);
+    }
+
+    [Theory]
+    [InlineData("NotAKeyword=1")]
+    [InlineData("Data Source")]
+    public async Task A_malformed_connection_string_is_left_for_the_connection_to_report(string connectionString)
+    {
+        // Guessing at a directory from a string we cannot parse would replace
+        // SQLite's precise "keyword not supported" with a confusing path error.
+        // Construction stays silent; the failure surfaces on the first connect.
+        SqliteConnectionFactory.EnsureDirectoryExists(connectionString);
+
+        var factory = new SqliteConnectionFactory(connectionString);
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => factory.OpenAsync(CancellationToken.None));
     }
 }

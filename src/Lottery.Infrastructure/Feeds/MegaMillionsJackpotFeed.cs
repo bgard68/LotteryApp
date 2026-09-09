@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Xml;
 using System.Xml.Linq;
 using Lottery.Application.Abstractions;
 using Lottery.Domain;
@@ -20,20 +21,22 @@ public sealed class MegaMillionsJackpotFeed(HttpClient http) : IJackpotFeed
         if (game != Game.MegaMillions)
             return null;
 
-        var xml = await http.GetStringAsync(Endpoint, ct);
-
-        // A bot challenge or error page is not the XML-wrapped payload; parse
-        // failures degrade to null like every other shape change.
         MmPayload? payload;
         try
         {
+            var xml = await http.GetStringAsync(Endpoint, ct);
             var json = XDocument.Parse(xml).Root?.Value;
             if (string.IsNullOrWhiteSpace(json))
                 return null;
 
             payload = JsonSerializer.Deserialize<MmPayload>(json, JsonOptions);
         }
-        catch (Exception ex) when (ex is System.Xml.XmlException or JsonException)
+        // Both sibling feeds already guard exactly this, and the summary above
+        // promises it. Without it a bot-challenge HTML page served with a 200 -
+        // which is precisely what retired powerball.com's API - reaches
+        // XDocument.Parse and throws a type RefreshGame's catch filter does not
+        // match, so /internal/refresh returns 500 instead of a feed error.
+        catch (Exception ex) when (ex is HttpRequestException or XmlException or JsonException)
         {
             return null;
         }

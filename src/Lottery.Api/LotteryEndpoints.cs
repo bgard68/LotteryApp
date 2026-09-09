@@ -10,7 +10,9 @@ public static class LotteryEndpoints
     {
         // Root index: hitting the API's base URL in a browser should explain
         // what lives here rather than returning a bare 404.
-        app.MapGet("/", (IWebHostEnvironment env) => Results.Ok(new
+        // GET *and* HEAD: the keep-warm monitor and platform probes default to HEAD, and a
+        // root endpoint that answers 405 to the probe watching it cannot report bad news.
+        app.MapMethods("/", new[] { "GET", "HEAD" }, (IWebHostEnvironment env) => Results.Ok(new
         {
             name = "LotteryApp API",
             games = Enum.GetValues<Game>().Select(g => g.ToString().ToLowerInvariant()),
@@ -145,7 +147,7 @@ public static class LotteryEndpoints
         // Optionally guarded by a shared key: set Refresh:Key in the environment
         // (never in a committed file) and callers send X-Refresh-Key.
         app.MapPost("/internal/refresh", async (HttpRequest request, RefreshGame refresh,
-            IConfiguration configuration, CancellationToken ct) =>
+            IConfiguration configuration, ILoggerFactory loggerFactory, CancellationToken ct) =>
         {
             var requiredKey = configuration["Refresh:Key"];
             if (!string.IsNullOrEmpty(requiredKey)
@@ -154,9 +156,35 @@ public static class LotteryEndpoints
                 return Results.Unauthorized();
             }
 
+            var logger = loggerFactory.CreateLogger("Lottery.Api.Refresh");
             var results = new List<RefreshResult>();
+
             foreach (var game in Enum.GetValues<Game>())
-                results.Add(await refresh.ExecuteAsync(game, ct));
+            {
+                try
+                {
+                    results.Add(await refresh.ExecuteAsync(game, ct));
+                }
+                // Per game rather than around the loop: one game's source
+                // failing must not cost the other game its refresh, which is
+                // what an unguarded loop did.
+                //
+                // RefreshGame reports the failure modes it anticipates. This
+                // catches the ones it does not, so a new escape degrades to a
+                // reported error instead of a 500 - and this is the endpoint
+                // the keep-alive workflow calls, so a 500 here reads as the
+                // whole instance being down.
+                //
+                // OperationCanceledException is deliberately excluded: a
+                // shutdown or a disconnected client is not a feed failure and
+                // must keep propagating.
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    logger.LogError(ex, "{Game}: refresh failed, reporting it as a feed error.", game);
+                    results.Add(new RefreshResult(game, UpToDate: false, NewDraws: 0,
+                        SkippedInvalid: 0, JackpotUpdated: false, FeedError: ex.Message));
+                }
+            }
 
             return Results.Ok(results.Select(r => new
             {

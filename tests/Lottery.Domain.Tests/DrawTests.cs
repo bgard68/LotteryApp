@@ -3,122 +3,95 @@ using Lottery.Domain;
 namespace Lottery.Domain.Tests;
 
 /// <summary>
-/// Draw.Create is the only way rows enter the system from feeds and snapshots,
-/// so its invariants (exactly 5 distinct whites, stored sorted) and the record's
-/// value equality (used by repository round-trip tests) get direct coverage.
+/// Draw hand-writes Equals/GetHashCode because a record compares its white-ball
+/// list by reference, which would make two identical drawings unequal. Dedupe
+/// on import, upsert idempotency and every Assert.Equal over draws rest on the
+/// value semantics pinned here - as does Create refusing to build a drawing
+/// that could not have happened.
 /// </summary>
 public class DrawTests
 {
-    private static readonly DateOnly SaturdayDate = new(2026, 7, 25);
+    private static readonly DateOnly Saturday = new(2026, 7, 25);
+
+    private static Draw Sample() => Draw.Create(Game.Powerball, Saturday, [7, 19, 33, 51, 64], 18);
+
+    [Theory]
+    [InlineData(new int[0])]
+    [InlineData(new[] { 7, 19, 33, 51 })]
+    [InlineData(new[] { 7, 19, 33, 51, 64, 65 })]
+    public void Create_RejectsAnythingOtherThanFiveWhiteBalls(int[] whites)
+    {
+        var ex = Assert.Throws<ArgumentException>(() =>
+            Draw.Create(Game.Powerball, Saturday, whites, 18));
+
+        Assert.Equal("whiteBalls", ex.ParamName);
+        Assert.Contains($"got {whites.Length}", ex.Message);
+    }
 
     [Fact]
-    public void Create_UnsortedWhites_AreStoredSortedAscending()
+    public void Create_RejectsRepeatedWhiteBalls()
     {
-        var draw = Draw.Create(Game.Powerball, SaturdayDate, [64, 7, 51, 19, 33], 18);
+        // Five values but four distinct balls: a drawing that cannot physically
+        // occur, and one that would inflate every later match count.
+        var ex = Assert.Throws<ArgumentException>(() =>
+            Draw.Create(Game.Powerball, Saturday, [7, 7, 33, 51, 64], 18));
+
+        Assert.Equal("whiteBalls", ex.ParamName);
+        Assert.Contains("distinct", ex.Message);
+    }
+
+    [Fact]
+    public void Create_StoresWhiteBallsSortedRegardlessOfDrawOrder()
+    {
+        var draw = Draw.Create(Game.Powerball, Saturday, [64, 7, 51, 19, 33], 18);
 
         Assert.Equal([7, 19, 33, 51, 64], draw.WhiteBalls);
     }
 
     [Fact]
-    public void Create_FourWhites_ThrowsWithCount()
+    public void SameNumbersDrawnInAnyOrder_AreOneAndTheSameDraw()
     {
-        var ex = Assert.Throws<ArgumentException>(() =>
-            Draw.Create(Game.Powerball, SaturdayDate, [1, 2, 3, 4], 18));
-
-        Assert.Contains("Expected 5 white balls, got 4.", ex.Message);
-        Assert.Equal("whiteBalls", ex.ParamName);
-    }
-
-    [Fact]
-    public void Create_SixWhites_ThrowsWithCount()
-    {
-        var ex = Assert.Throws<ArgumentException>(() =>
-            Draw.Create(Game.Powerball, SaturdayDate, [1, 2, 3, 4, 5, 6], 18));
-
-        Assert.Contains("Expected 5 white balls, got 6.", ex.Message);
-    }
-
-    [Fact]
-    public void Create_DuplicateWhites_Throws()
-    {
-        var ex = Assert.Throws<ArgumentException>(() =>
-            Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 51], 18));
-
-        Assert.Contains("White balls must be distinct.", ex.Message);
-    }
-
-    [Fact]
-    public void Create_CarriesJackpotFacts()
-    {
-        var draw = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18,
-            jackpotAmount: 389_000_000m, jackpotWon: false);
-
-        Assert.Equal(389_000_000m, draw.JackpotAmount);
-        Assert.False(draw.JackpotWon);
-    }
-
-    [Fact]
-    public void Create_JackpotFactsDefaultToNull()
-    {
-        var draw = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18);
-
-        Assert.Null(draw.JackpotAmount);
-        Assert.Null(draw.JackpotWon);
-    }
-
-    [Fact]
-    public void Equals_SameValuesInDifferentListInstances_AreEqual()
-    {
-        // Records compare collections by reference; Draw overrides to content -
-        // repository round-trip assertions depend on this.
-        var a = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18, 389_000_000m, false);
-        var b = Draw.Create(Game.Powerball, SaturdayDate, [64, 51, 33, 19, 7], 18, 389_000_000m, false);
+        // The white-ball lists are distinct instances holding equal values, which
+        // is exactly the case default record equality gets wrong.
+        var a = Draw.Create(Game.Powerball, Saturday, [7, 19, 33, 51, 64], 18);
+        var b = Draw.Create(Game.Powerball, Saturday, [64, 51, 33, 19, 7], 18);
 
         Assert.Equal(a, b);
+        Assert.True(a == b);
         Assert.Equal(a.GetHashCode(), b.GetHashCode());
+        // Equal hash codes are what let a HashSet (and the import dedupe) see one draw.
+        Assert.Single(new HashSet<Draw> { a, b });
     }
 
     [Fact]
-    public void Equals_OneDifferentWhiteBall_AreNotEqual()
+    public void DrawsDifferingInAnyOneField_AreNotEqual()
     {
-        var a = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18);
-        var b = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 65], 18);
+        // A hand-written Equals that quietly drops a field is the classic bug
+        // here: each case below fails only if that field stopped being compared.
+        var sample = Sample();
+        (string Field, Draw Draw)[] variants =
+        [
+            ("game", sample with { Game = Game.MegaMillions }),
+            ("draw date", sample with { DrawDate = Saturday.AddDays(-1) }),
+            ("one white ball", sample with { WhiteBalls = [7, 19, 33, 51, 65] }),
+            ("special ball", sample with { Special = 19 }),
+            ("jackpot amount", sample with { JackpotAmount = 214_000_000m }),
+            ("jackpot won", sample with { JackpotWon = true }),
+        ];
 
-        Assert.NotEqual(a, b);
+        Assert.All(variants, v =>
+        {
+            Assert.False(sample.Equals(v.Draw), $"draws differing in {v.Field} must not be equal");
+            Assert.NotEqual(sample, v.Draw);
+        });
     }
 
     [Fact]
-    public void Equals_DifferentSpecial_AreNotEqual()
+    public void ADrawIsNeverEqualToNull()
     {
-        var a = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18);
-        var b = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 19);
-
-        Assert.NotEqual(a, b);
-    }
-
-    [Fact]
-    public void Equals_DifferentGameSameNumbers_AreNotEqual()
-    {
-        var a = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18);
-        var b = Draw.Create(Game.MegaMillions, SaturdayDate, [7, 19, 33, 51, 64], 18);
-
-        Assert.NotEqual(a, b);
-    }
-
-    [Fact]
-    public void Equals_DifferentJackpotAmount_AreNotEqual()
-    {
-        var a = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18, 389_000_000m);
-        var b = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18, 400_000_000m);
-
-        Assert.NotEqual(a, b);
-    }
-
-    [Fact]
-    public void Equals_Null_IsFalse()
-    {
-        var draw = Draw.Create(Game.Powerball, SaturdayDate, [7, 19, 33, 51, 64], 18);
+        var draw = Sample();
 
         Assert.False(draw.Equals(null));
+        Assert.False(draw == null);
     }
 }

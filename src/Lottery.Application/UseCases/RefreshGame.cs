@@ -53,7 +53,15 @@ public sealed class RefreshGame(
                         newDraws++;
                 }
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+            // ArgumentException included deliberately: EraValidator.Validate
+            // calls RuleEras.ForDate, which THROWS ArgumentOutOfRangeException
+            // for a draw dated before any known era rather than returning a
+            // violation. Without it a single bogus feed date escaped this
+            // method entirely, and /internal/refresh - which has no try/catch -
+            // answered 500. This class promises feed failures are reported,
+            // never thrown; a bad date is a feed failure like any other.
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
+                or InvalidOperationException or ArgumentException)
             {
                 feedError = ex.Message;
             }
@@ -82,10 +90,21 @@ public sealed class RefreshGame(
         if (info is null)
             return false;
 
-        if (info.NextEstimatedJackpot is not null || info.NextCashValue is not null)
+        // Zero is not a jackpot, it is a placeholder: sources publish the next
+        // draw before its amount is announced, and a plain null check accepted
+        // that - replacing a good stored estimate with 0, which the site then
+        // rendered as "Estimated jackpot $0".
+        //
+        // Guarded here as well as in the feed so no source can poison the store
+        // this way. Skipping the save leaves the previous estimate in place,
+        // which is the right thing to keep showing until the real figure lands.
+        var estimate = info.NextEstimatedJackpot is > 0 ? info.NextEstimatedJackpot : null;
+        var cashValue = info.NextCashValue is > 0 ? info.NextCashValue : null;
+
+        if (estimate is not null || cashValue is not null)
         {
             await jackpotStore.SaveAsync(new JackpotEstimate(
-                game, info.NextEstimatedJackpot, info.NextCashValue, time.GetUtcNow()), ct);
+                game, estimate, cashValue, time.GetUtcNow()), ct);
         }
 
         if (info is { LastDrawDate: not null, LastJackpot: not null })

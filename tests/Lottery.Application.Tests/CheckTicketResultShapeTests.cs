@@ -5,9 +5,10 @@ using Microsoft.Extensions.Time.Testing;
 namespace Lottery.Application.Tests;
 
 /// <summary>
-/// Shape of a successful check: ordering (newest first), the history metadata
-/// (DrawsChecked counts everything scanned, not just hits; HistorySince is the
-/// oldest stored draw), tier mapping of the jackpot row, and game isolation.
+/// Edges the base CheckTicketTests leaves open: match ordering (newest first),
+/// game isolation on the check side, current-era Mega Millions bounds with the
+/// game's own special-ball name, and validation short-circuiting ahead of any
+/// data access.
 /// </summary>
 public class CheckTicketResultShapeTests
 {
@@ -37,51 +38,6 @@ public class CheckTicketResultShapeTests
         Assert.Equal(2, result.Matches.Count);
         Assert.Equal(new DateOnly(2026, 7, 25), result.Matches[0].DrawDate);
         Assert.Equal(new DateOnly(2026, 7, 22), result.Matches[1].DrawDate);
-    }
-
-    [Fact]
-    public async Task JackpotHit_MapsToJackpotTierWithNoFixedAmount()
-    {
-        var checker = new CheckTicket(ThreeDrawRepo(), Time);
-
-        var result = await checker.ExecuteAsync(Game.Powerball, TicketWhites, TicketSpecial, CancellationToken.None);
-
-        var jackpot = result.Matches[0];
-        Assert.Equal(5, jackpot.WhiteMatches);
-        Assert.True(jackpot.SpecialMatched);
-        Assert.Equal("Match 5 + Powerball", jackpot.TierName);
-        Assert.True(jackpot.IsJackpot);
-        Assert.Null(jackpot.ApproximateAmount);
-        Assert.Equal([7, 19, 33, 51, 64], jackpot.DrawnWhiteBalls);
-        Assert.Equal(18, jackpot.DrawnSpecial);
-    }
-
-    [Fact]
-    public async Task LowerTierHit_CarriesTheDrawnNumbersForHighlighting()
-    {
-        var checker = new CheckTicket(ThreeDrawRepo(), Time);
-
-        var result = await checker.ExecuteAsync(Game.Powerball, TicketWhites, TicketSpecial, CancellationToken.None);
-
-        var partial = result.Matches[1];
-        Assert.Equal(3, partial.WhiteMatches);
-        Assert.True(partial.SpecialMatched);
-        Assert.Equal("Match 3 + Powerball", partial.TierName);
-        Assert.Equal(100m, partial.ApproximateAmount);
-        Assert.False(partial.IsJackpot);
-        Assert.Equal([1, 2, 7, 19, 33], partial.DrawnWhiteBalls);
-    }
-
-    [Fact]
-    public async Task DrawsChecked_CountsTheWholeHistory_NotJustHits()
-    {
-        var checker = new CheckTicket(ThreeDrawRepo(), Time);
-
-        var result = await checker.ExecuteAsync(Game.Powerball, TicketWhites, TicketSpecial, CancellationToken.None);
-
-        Assert.Equal(3, result.DrawsChecked); // includes the no-prize draw
-        Assert.Equal(new DateOnly(2026, 7, 20), result.HistorySince);
-        Assert.Null(result.Error);
     }
 
     [Fact]

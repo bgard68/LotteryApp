@@ -85,8 +85,13 @@ public sealed class FakeNumbersFeed(IReadOnlyList<Draw> draws) : Lottery.Applica
 
 public sealed class FakeJackpotFeed(Lottery.Application.Abstractions.JackpotInfo? info) : Lottery.Application.Abstractions.IJackpotFeed
 {
-    public Task<Lottery.Application.Abstractions.JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct) =>
-        Task.FromResult(info?.Game == game ? info : null);
+    public Exception? ThrowOnFetch { get; set; }
+
+    public Task<Lottery.Application.Abstractions.JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct)
+    {
+        if (ThrowOnFetch is not null) throw ThrowOnFetch;
+        return Task.FromResult(info?.Game == game ? info : null);
+    }
 }
 
 public sealed class FakeImportLedger : IImportLedger

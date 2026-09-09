@@ -1,13 +1,12 @@
-using System.Globalization;
 using Lottery.Domain;
 
 namespace Lottery.Domain.Tests;
 
 /// <summary>
-/// The tier tables are the payout contract shown to users. The existing suite
-/// asserts that every winning combination has *a* tier; these tests pin each
-/// tier's exact name, amount, and jackpot flag, so a fat-fingered edit to one
-/// row fails one specific case.
+/// The tier tables are the payout contract shown to users. TicketMatcherTests
+/// asserts every winning combination has *a* tier and PrizeTierTests covers
+/// DisplayAmount; these pin each tier's exact name, amount, and jackpot flag,
+/// so a fat-fingered edit to one row fails one specific case.
 /// </summary>
 public class PrizeTiersTests
 {
@@ -69,36 +68,4 @@ public class PrizeTiersTests
         Assert.Null(PrizeTiers.TierFor(Game.MegaMillions, result));
     }
 
-    [Fact]
-    public void DisplayAmount_JackpotTier_SaysJackpot()
-    {
-        var jackpotTier = PrizeTiers.TierFor(Game.Powerball, new MatchResult(AnyDate, 5, true));
-
-        Assert.Equal("Jackpot", jackpotTier!.DisplayAmount);
-    }
-
-    [Fact]
-    public void DisplayAmount_FixedTier_FormatsWholeDollars()
-    {
-        var original = CultureInfo.CurrentCulture;
-        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
-        try
-        {
-            var tier = PrizeTiers.TierFor(Game.Powerball, new MatchResult(AnyDate, 4, true));
-
-            Assert.Equal("$50,000", tier!.DisplayAmount);
-        }
-        finally
-        {
-            CultureInfo.CurrentCulture = original;
-        }
-    }
-
-    [Fact]
-    public void DisplayAmount_UnknownAmountNonJackpot_ShowsDash()
-    {
-        var tier = new PrizeTier(2, false, "Hypothetical", null, false);
-
-        Assert.Equal("-", tier.DisplayAmount);
-    }
 }

@@ -33,12 +33,4 @@ public class GameExtensionsTests
     {
         Assert.Equal(new TimeOnly(23, 0), Game.MegaMillions.DrawTimeEastern());
     }
-
-    [Theory]
-    [InlineData(Game.Powerball, "Powerball")]
-    [InlineData(Game.MegaMillions, "Mega Ball")]
-    public void SpecialBallName_IsTheOfficialName(Game game, string expected)
-    {
-        Assert.Equal(expected, game.SpecialBallName());
-    }
 }

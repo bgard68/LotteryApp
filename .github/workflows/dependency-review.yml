@@ -29,6 +29,14 @@ jobs:
     name: Dependency review
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # comment-summary-in-pr below needs this to post. Without it the action
+      # degrades to a log warning and the summary silently never appears - a
+      # configured option that does nothing reads as a working feature.
+      # (For pull requests from forks the token stays read-only regardless, so
+      # the comment is best-effort there; the job still fails correctly.)
+      pull-requests: write
 
     steps:
       - name: Checkout

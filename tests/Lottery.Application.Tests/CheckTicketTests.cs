@@ -51,6 +51,35 @@ public class CheckTicketTests
     }
 
     [Fact]
+    public async Task WinningMatch_CarriesTheDrawnNumbersBack()
+    {
+        // The UI highlights which of the ticket's numbers hit, which it can only
+        // do if each match carries the drawing's own numbers alongside the counts.
+        var result = await new CheckTicket(RepoWithSaturdayDraw(), Time)
+            .ExecuteAsync(Game.Powerball, [7, 19, 33, 1, 2], 18, CancellationToken.None);
+
+        var match = Assert.Single(result.Matches);
+        Assert.Equal([7, 19, 33, 51, 64], match.DrawnWhiteBalls);
+        Assert.Equal(18, match.DrawnSpecial);
+    }
+
+    [Fact]
+    public async Task OkResult_ReportsTheHistoryItWasCheckedAgainst()
+    {
+        // "No wins" only means something next to how much history was searched,
+        // so the count and the oldest draw date travel back with the answer.
+        var repo = RepoWithSaturdayDraw();
+        repo.Draws.Add(Draw.Create(Game.Powerball, new DateOnly(2015, 10, 7), [1, 2, 3, 4, 5], 6));
+
+        var result = await new CheckTicket(repo, Time)
+            .ExecuteAsync(Game.Powerball, [7, 19, 33, 1, 2], 18, CancellationToken.None);
+
+        Assert.Equal(CheckStatus.Ok, result.Status);
+        Assert.Equal(2, result.DrawsChecked);
+        Assert.Equal(new DateOnly(2015, 10, 7), result.HistorySince);
+    }
+
+    [Fact]
     public async Task NonWinningPartialMatch_IsExcluded()
     {
         // 2 whites, no special: below every prize tier.

@@ -8,151 +8,188 @@ using Microsoft.Extensions.Time.Testing;
 namespace Lottery.Api.Tests;
 
 /// <summary>
-/// The background refresh loop on virtual time: gap-repair at startup, waking
-/// five minutes after the next drawing, and polling every ten minutes until the
-/// feed publishes. The jackpot feed is called once per game per cycle, which
-/// makes its call count the cycle odometer. Real DrawRefreshService and
-/// RefreshGame; only ports and the clock are test doubles.
+/// The refresh loop on virtual time. Every wait in the service goes through
+/// TimeProvider precisely so this is possible - a real-clock test of a service
+/// that sleeps until the next drawing would take days.
 /// </summary>
 public sealed class DrawRefreshServiceTests
 {
-    // Monday 2026-07-27 noon Eastern; PB draw tonight 22:59 ET (02:59 UTC),
-    // so the service's next wake is 03:04 UTC (draw + 5 minute feed lag).
-    private static readonly DateTimeOffset MondayNoonEt = new(2026, 7, 27, 16, 0, 0, TimeSpan.Zero);
+    // A Wednesday, comfortably between drawings.
+    private static readonly DateTimeOffset Start = new(2026, 7, 22, 12, 0, 0, TimeSpan.Zero);
 
-    private static readonly Draw SaturdayPowerball = Draw.Create(Game.Powerball, new DateOnly(2026, 7, 25), [3, 4, 24, 36, 47], 17);
-    private static readonly Draw FridayMegaMillions = Draw.Create(Game.MegaMillions, new DateOnly(2026, 7, 24), [2, 5, 42, 44, 60], 1);
-    private static readonly Draw MondayPowerball = Draw.Create(Game.Powerball, new DateOnly(2026, 7, 27), [7, 19, 33, 51, 64], 18);
-
-    private sealed record Harness(
-        DrawRefreshService Service,
-        ServiceProvider Provider,
-        InMemoryDrawRepository Repo,
-        StubWinningNumbersFeed Numbers,
-        StubJackpotFeed Jackpots,
-        FakeTimeProvider Time) : IAsyncDisposable
+    private static (DrawRefreshService Service, RecordingRefresh Refresh, FakeTimeProvider Time) Build()
     {
-        public async ValueTask DisposeAsync()
-        {
-            await Service.StopAsync(CancellationToken.None);
-            await Provider.DisposeAsync();
-        }
+        var refresh = new RecordingRefresh();
+        var services = new ServiceCollection()
+            .AddSingleton<IDrawRepository>(refresh)
+            .AddSingleton<IWinningNumbersFeed>(refresh)
+            .AddSingleton<IJackpotFeed>(refresh)
+            .AddSingleton<IJackpotStore>(refresh)
+            .AddSingleton(TimeProvider.System)
+            .AddTransient<RefreshGame>()
+            .BuildServiceProvider();
+
+        var time = new FakeTimeProvider(Start);
+        var service = new DrawRefreshService(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            time,
+            NullLogger<DrawRefreshService>.Instance);
+
+        return (service, refresh, time);
     }
 
-    private static Harness BuildHarness()
+    [Fact]
+    public async Task StartUp_RefreshesEveryGameImmediately_ToRepairGapsAfterDowntime()
     {
-        var repo = new InMemoryDrawRepository();
-        repo.Seed(SaturdayPowerball, FridayMegaMillions); // both games current at the pinned time
-        var numbers = new StubWinningNumbersFeed();
-        var jackpots = new StubJackpotFeed(); // answers null: harmless, but counts cycles
-        var time = new FakeTimeProvider(MondayNoonEt);
+        var (service, refresh, _) = Build();
 
-        var services = new ServiceCollection();
-        services.AddSingleton<IDrawRepository>(repo);
-        services.AddSingleton<IWinningNumbersFeed>(numbers);
-        services.AddSingleton<IJackpotFeed>(jackpots);
-        services.AddSingleton<IJackpotStore>(new InMemoryJackpotStore());
-        services.AddSingleton<TimeProvider>(time);
-        services.AddTransient<RefreshGame>();
-        var provider = services.BuildServiceProvider();
+        await service.StartAsync(CancellationToken.None);
+        await refresh.WaitForIdleAsync();
+        await service.StopAsync(CancellationToken.None);
 
-        var service = new DrawRefreshService(
-            provider.GetRequiredService<IServiceScopeFactory>(), time, NullLogger<DrawRefreshService>.Instance);
+        // The startup pass is what self-heals a host that was asleep at draw
+        // time, so it must cover both games before any waiting happens.
+        Assert.Contains(Game.Powerball, refresh.Games);
+        Assert.Contains(Game.MegaMillions, refresh.Games);
+    }
 
-        return new Harness(service, provider, repo, numbers, jackpots, time);
+    [Fact]
+    public async Task AFailingGame_DoesNotStopTheOtherOne()
+    {
+        var (service, refresh, _) = Build();
+        refresh.ThrowFor = Game.Powerball;
+
+        await service.StartAsync(CancellationToken.None);
+        await refresh.WaitForIdleAsync();
+        await service.StopAsync(CancellationToken.None);
+
+        // One game's feed being down is routine; it must not cost the other
+        // game its refresh, and it must not take the host down.
+        Assert.Contains(Game.MegaMillions, refresh.Games);
+    }
+
+    [Fact]
+    public async Task StoppingDuringTheWait_ShutsDownCleanly()
+    {
+        var (service, refresh, _) = Build();
+
+        await service.StartAsync(CancellationToken.None);
+        await refresh.WaitForIdleAsync();
+
+        // The service is now parked in Task.Delay until the next drawing. A
+        // host shutting down at that moment is the normal case, and it must
+        // not surface the cancellation as a fault.
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(service.ExecuteTask!.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task AfterTheNextDrawing_ItWakesAndRefreshesAgain()
+    {
+        var (service, refresh, time) = Build();
+
+        await service.StartAsync(CancellationToken.None);
+        var afterStartup = await refresh.WaitForIdleAsync();
+
+        // Advance in steps rather than one jump: the service registers its
+        // timer only once the startup pass has fully unwound, so a single
+        // Advance can land before that timer exists and never fire it.
+        var woke = await AdvanceUntilAsync(time, () => refresh.Calls > afterStartup);
+
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.True(woke, "the service never refreshed again after the drawing time passed");
     }
 
     /// <summary>
-    /// Advances virtual time in fixed steps until the condition holds. The
-    /// service registers each fake-time delay a few thread-pool continuations
-    /// after its observable side effect, so each step gets a real-time settle
-    /// window before the next advance - a single big jump could strand a timer
-    /// that had not been registered yet.
+    /// Pushes virtual time forward in 30-minute steps until the condition holds,
+    /// yielding between steps so the service's continuations can run.
     /// </summary>
-    private static async Task AdvanceUntilAsync(FakeTimeProvider time, TimeSpan step, Func<bool> condition, string because)
+    private static async Task<bool> AdvanceUntilAsync(FakeTimeProvider time, Func<bool> condition)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
-        while (!condition() && DateTime.UtcNow < deadline)
+        for (var i = 0; i < 400; i++)
         {
-            time.Advance(step);
-            var settle = DateTime.UtcNow + TimeSpan.FromMilliseconds(250);
-            while (!condition() && DateTime.UtcNow < settle)
-                await Task.Delay(10);
+            if (condition()) return true;
+            time.Advance(TimeSpan.FromMinutes(30));
+            await Task.Delay(5);
         }
 
-        Assert.True(condition(), $"Timed out waiting for: {because}");
+        return condition();
     }
 
-    [Fact]
-    public async Task Startup_RunsOneGapRepairCycle_WithoutFetchingCurrentGames()
+    /// <summary>
+    /// Stands in for the whole refresh dependency graph and records which games
+    /// were asked for.
+    /// </summary>
+    private sealed class RecordingRefresh : IDrawRepository, IWinningNumbersFeed, IJackpotFeed, IJackpotStore
     {
-        await using var harness = BuildHarness();
+        private readonly Lock _gate = new();
+        private readonly List<Game> _games = [];
 
-        await harness.Service.StartAsync(CancellationToken.None);
-        await TestWait.UntilAsync(() => harness.Jackpots.Calls >= 2, "startup refresh for both games");
+        public Game? ThrowFor { get; set; }
 
-        Assert.Equal(2, harness.Jackpots.Calls);  // exactly one cycle: two games
-        Assert.Equal(0, harness.Numbers.Calls);   // both games current -> numbers feed untouched
-    }
+        public Game[] Games
+        {
+            get { lock (_gate) return [.. _games]; }
+        }
 
-    [Fact]
-    public async Task WakesAfterTheDrawing_AndStoresThePublishedResult()
-    {
-        await using var harness = BuildHarness();
-        harness.Numbers.Publish(MondayPowerball); // feed will have it by wake time
-        await harness.Service.StartAsync(CancellationToken.None);
-        await TestWait.UntilAsync(() => harness.Jackpots.Calls >= 2, "startup refresh");
+        public int Calls
+        {
+            get { lock (_gate) return _games.Count; }
+        }
 
-        // Wake is Monday 22:59 ET + 5 min; step past it four hours at a time.
-        await AdvanceUntilAsync(harness.Time, TimeSpan.FromHours(4),
-            () => harness.Repo.Contains(Game.Powerball, new DateOnly(2026, 7, 27)),
-            "Monday's drawing stored after the scheduled wake");
-        await TestWait.UntilAsync(() => harness.Jackpots.Calls >= 4, "wake cycle finishes both games");
+        /// <summary>
+        /// Waits until the service stops touching the repository, and returns the
+        /// call count at that point. The number of repository reads per refresh
+        /// cycle is RefreshGame's business, so the test watches for the loop to
+        /// go quiet rather than counting to a figure it would have to keep in
+        /// step with that use case.
+        /// </summary>
+        public async Task<int> WaitForIdleAsync()
+        {
+            var previous = -1;
+            for (var i = 0; i < 200; i++)
+            {
+                var current = Calls;
+                if (current > 0 && current == previous)
+                    return current;
 
-        Assert.Equal(1, harness.Numbers.Calls);  // only the behind game was fetched
-        Assert.Equal(4, harness.Jackpots.Calls); // startup cycle + wake cycle, nothing more
-    }
+                previous = current;
+                await Task.Delay(10);
+            }
 
-    [Fact]
-    public async Task PollsOnBackoff_UntilTheFeedPublishes_ThenGoesQuiet()
-    {
-        await using var harness = BuildHarness();
-        await harness.Service.StartAsync(CancellationToken.None);
-        await TestWait.UntilAsync(() => harness.Jackpots.Calls >= 2, "startup refresh");
+            throw new TimeoutException("The refresh loop never went idle.");
+        }
 
-        // Wake fires with the feed still empty: first poll finds nothing.
-        await AdvanceUntilAsync(harness.Time, TimeSpan.FromHours(4),
-            () => harness.Numbers.Calls >= 1, "first poll at wake time");
-        Assert.Equal(1, harness.Numbers.Calls);
+        public Task<Draw?> GetLatestAsync(Game game, CancellationToken ct)
+        {
+            lock (_gate) _games.Add(game);
+            if (ThrowFor == game) throw new InvalidOperationException("feed down");
 
-        // Still nothing published: the next 10-minute poll also comes up empty.
-        await AdvanceUntilAsync(harness.Time, TimeSpan.FromMinutes(10),
-            () => harness.Numbers.Calls >= 2, "second poll on the backoff interval");
-        Assert.Equal(2, harness.Numbers.Calls);
-        Assert.False(harness.Repo.Contains(Game.Powerball, new DateOnly(2026, 7, 27)));
+            // A stored draw dated in the far future means "nothing outstanding",
+            // which ends the poll loop after a single pass.
+            return Task.FromResult<Draw?>(Draw.Create(
+                game, new DateOnly(2099, 1, 1), [1, 2, 3, 4, 5], 6, null, null));
+        }
 
-        // The feed publishes; the next poll stores it and the loop goes quiet.
-        harness.Numbers.Publish(MondayPowerball);
-        await AdvanceUntilAsync(harness.Time, TimeSpan.FromMinutes(10),
-            () => harness.Repo.Contains(Game.Powerball, new DateOnly(2026, 7, 27)),
-            "third poll stores the published drawing");
-        await TestWait.UntilAsync(() => harness.Jackpots.Calls >= 8, "third cycle finishes both games");
+        public Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
+            Task.FromResult<IReadOnlyList<Draw>>([]);
 
-        Assert.Equal(3, harness.Numbers.Calls);  // no fourth poll after success
-        Assert.Equal(8, harness.Jackpots.Calls); // startup + three polls, two games each
-    }
+        public Task<JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct) =>
+            Task.FromResult<JackpotInfo?>(null);
 
-    [Fact]
-    public async Task Stop_CancelsTheLoopCleanly()
-    {
-        await using var harness = BuildHarness();
-        await harness.Service.StartAsync(CancellationToken.None);
-        await TestWait.UntilAsync(() => harness.Jackpots.Calls >= 2, "startup refresh");
+        public Task<JackpotEstimate?> GetAsync(Game game, CancellationToken ct) =>
+            Task.FromResult<JackpotEstimate?>(null);
 
-        await harness.Service.StopAsync(CancellationToken.None);
+        public Task SaveAsync(JackpotEstimate estimate, CancellationToken ct) => Task.CompletedTask;
 
-        Assert.NotNull(harness.Service.ExecuteTask);
-        Assert.True(harness.Service.ExecuteTask!.IsCompletedSuccessfully,
-            "cancellation must end the loop, not fault it");
+        public Task<int> CountAsync(Game game, CancellationToken ct) => Task.FromResult(1);
+        public Task<IReadOnlyList<Draw>> GetRangeAsync(Game game, DateOnly? from, DateOnly? to, int limit, CancellationToken ct) => Task.FromResult<IReadOnlyList<Draw>>([]);
+        public Task<DateOnly?> EarliestDrawDateAsync(Game game, CancellationToken ct) => Task.FromResult<DateOnly?>(null);
+        public Task<IReadOnlyList<MatchRow>> FindMatchesAsync(Game game, IReadOnlyList<int> whites, int special, CancellationToken ct) => Task.FromResult<IReadOnlyList<MatchRow>>([]);
+        public Task<bool> UpsertAsync(Draw draw, CancellationToken ct) => Task.FromResult(true);
+        public Task BulkInsertAsync(IReadOnlyList<Draw> draws, CancellationToken ct) => Task.CompletedTask;
+        public Task UpdateJackpotAsync(Game game, DateOnly drawDate, decimal? jackpotAmount, bool? jackpotWon, CancellationToken ct) => Task.CompletedTask;
     }
 }

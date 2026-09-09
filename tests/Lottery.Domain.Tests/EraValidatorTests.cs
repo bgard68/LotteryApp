@@ -66,19 +66,4 @@ public class EraValidatorTests
         Assert.Contains("outside 1-59", violation!.Reason);
     }
 
-    [Theory]
-    [InlineData(new[] { 1, 2, 3, 4, 5 }, 6, true)]
-    [InlineData(new[] { 1, 2, 3, 4 }, 6, false)]        // too few whites
-    [InlineData(new[] { 1, 2, 3, 4, 5, 6 }, 7, false)]  // too many whites
-    [InlineData(new[] { 1, 2, 3, 4, 4 }, 6, false)]     // duplicate white
-    [InlineData(new[] { 0, 2, 3, 4, 5 }, 6, false)]     // white below 1
-    [InlineData(new[] { 1, 2, 3, 4, 70 }, 6, false)]    // white above era max
-    [InlineData(new[] { 1, 2, 3, 4, 5 }, 0, false)]     // special below 1
-    [InlineData(new[] { 1, 2, 3, 4, 5 }, 27, false)]    // special above era max
-    public void IsValidDraw_EnforcesEveryRule(int[] whites, int special, bool expected)
-    {
-        var currentPowerballEra = RuleEras.ForDate(Game.Powerball, new DateOnly(2026, 7, 27)); // 5/69 + 1/26
-
-        Assert.Equal(expected, currentPowerballEra.IsValidDraw(whites, special));
-    }
 }

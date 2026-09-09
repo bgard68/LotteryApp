@@ -50,4 +50,13 @@ public class SnapshotHistoryTests
         var history = await Source.GetHistoryAsync(Game.Powerball, CancellationToken.None);
         Assert.Equal(history.OrderBy(d => d.DrawDate), history);
     }
+
+    [Fact]
+    public void Name_IdentifiesTheSourceInTheImportLedger()
+    {
+        // This string is written to ImportLedger.Source on first boot, and is how
+        // a later reader tells a snapshot seed apart from a live import. Changing
+        // it silently orphans the provenance of every row already recorded.
+        Assert.Equal("snapshot:data.ny.gov", Source.Name);
+    }
 }
