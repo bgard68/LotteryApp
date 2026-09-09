@@ -21,11 +21,23 @@ public sealed class MegaMillionsJackpotFeed(HttpClient http) : IJackpotFeed
             return null;
 
         var xml = await http.GetStringAsync(Endpoint, ct);
-        var json = XDocument.Parse(xml).Root?.Value;
-        if (string.IsNullOrWhiteSpace(json))
-            return null;
 
-        var payload = JsonSerializer.Deserialize<MmPayload>(json, JsonOptions);
+        // A bot challenge or error page is not the XML-wrapped payload; parse
+        // failures degrade to null like every other shape change.
+        MmPayload? payload;
+        try
+        {
+            var json = XDocument.Parse(xml).Root?.Value;
+            if (string.IsNullOrWhiteSpace(json))
+                return null;
+
+            payload = JsonSerializer.Deserialize<MmPayload>(json, JsonOptions);
+        }
+        catch (Exception ex) when (ex is System.Xml.XmlException or JsonException)
+        {
+            return null;
+        }
+
         if (payload?.Jackpot is null)
             return null;
 
