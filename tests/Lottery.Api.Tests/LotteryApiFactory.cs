@@ -1,5 +1,6 @@
 using Lottery.Application.Abstractions;
 using Lottery.Domain;
+using Lottery.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,14 +17,19 @@ namespace Lottery.Api.Tests;
 /// </summary>
 public class LotteryApiFactory : WebApplicationFactory<Program>
 {
-    private readonly string _dbPath =
+    /// <summary>The throwaway database this host must use - asserted by the
+    /// factory's own sentinel test, because a silently ignored override would
+    /// run every API test against a shared default-path file.</summary>
+    public string DbPath { get; } =
         Path.Combine(Path.GetTempPath(), $"lottery-api-test-{Guid.NewGuid():N}.db");
 
     /// <summary>Hosting environment to boot under. Several behaviours key off it -
     /// the CSP header, HSTS, and whether the Scalar UI is mapped at all.</summary>
     protected virtual string Environment => "Production";
 
-    /// <summary>Extra configuration applied after the defaults, so a test can override one key.</summary>
+    /// <summary>Extra configuration applied after the defaults, so a test can
+    /// override one key. Only keys the app reads at request time land here in
+    /// time; startup-read keys need UseSetting (see the connection string below).</summary>
     public Dictionary<string, string?> Settings { get; } = [];
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -34,7 +40,7 @@ public class LotteryApiFactory : WebApplicationFactory<Program>
         {
             var settings = new Dictionary<string, string?>
             {
-                ["ConnectionStrings:Default"] = $"Data Source={_dbPath}",
+                ["ConnectionStrings:Default"] = $"Data Source={DbPath}",
                 ["Database:Provider"] = "Sqlite",
             };
             foreach (var (key, value) in Settings)
@@ -45,6 +51,19 @@ public class LotteryApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
+            // The connection string is consumed while services are being
+            // registered - BEFORE the in-memory configuration above is appended
+            // - so the config entry alone silently loses to the "lottery.db"
+            // fallback and every factory shares one file in the test bin
+            // (lesson 31). Redirecting at the service seam, with the real
+            // factory and initializer, is timing-proof.
+            var connectionString = $"Data Source={DbPath}";
+            services.RemoveAll<IDbConnectionFactory>();
+            services.AddSingleton<IDbConnectionFactory>(new SqliteConnectionFactory(connectionString));
+            services.RemoveAll<IDatabaseInitializer>();
+            services.AddSingleton<IDatabaseInitializer>(sp =>
+                new DatabaseInitializer(sp.GetRequiredService<IDbConnectionFactory>(), connectionString));
+
             // The refresh loop calls live feeds on a timer; a test host has no
             // business doing that. Removing the registration also keeps the
             // test's SQLite file from being written behind the test's back.
@@ -65,7 +84,7 @@ public class LotteryApiFactory : WebApplicationFactory<Program>
         if (!disposing) return;
 
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-        if (File.Exists(_dbPath)) File.Delete(_dbPath);
+        if (File.Exists(DbPath)) File.Delete(DbPath);
     }
 }
 

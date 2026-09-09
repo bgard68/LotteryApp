@@ -1,6 +1,6 @@
 ﻿# Tests
 
-316 tests across four projects, one per layer. Run with `dotnet test`.
+378 tests across four projects, one per layer. Run with `dotnet test`.
 
 The PowerShell smoke test in [scripts](../scripts/README.md) adds **32 checks**
 against a real running API - every endpoint, the error conditions, the refresh
@@ -9,7 +9,7 @@ asserts the *absence* of the `Server` header).
 
 Back to the [main README](../../README.md).
 
-## Lottery.Domain.Tests (58)
+## Lottery.Domain.Tests (95)
 
 Pure logic, no mocks needed:
 
@@ -26,8 +26,24 @@ Pure logic, no mocks needed:
 - **`PickGeneratorTests`** - seeded determinism, era validity over hundreds
   of draws, and full-range coverage (every ball 1..69 and 1..26 appears -
   guards off-by-one at both ends).
+- **`DrawTests` / `GameTests` / `PrizeTierTests`** - `Draw.Create` invariants
+  and content-based record equality, the games' reference facts, and
+  `DisplayAmount`'s three branches.
+- **`DrawScheduleBoundaryTests`** - the boundaries the base schedule tests
+  leave open: the exact draw instant (next-draw is strictly-after,
+  previous-draw is at-or-before), the **spring DST transition** (the base
+  suite covers only the fall one), winter/summer `DrawInstantUtc` differing by
+  exactly the DST hour, and Mega Millions' schedule math.
+- **`EraValidatorTests`** - the era consulted is the draw *date's* era, not
+  today's (proven in both directions: numbers legal then but not now pass,
+  numbers legal now but not then fail), and violation messages name the balls
+  and bounds a human sees in CI.
+- **`GameExtensionsTests`** - the draw calendar (Mon/Wed/Sat vs Tue/Fri) and
+  draw times (22:59 vs 23:00 Eastern) as pinned reference facts.
+- **`PrizeTiersTests`** - every tier's exact name, amount, and jackpot flag
+  for both games (18 rows), and non-winning combinations mapping to no tier.
 
-## Lottery.Application.Tests (65)
+## Lottery.Application.Tests (73)
 
 Use cases against in-memory fakes + `FakeTimeProvider` (virtual time - the
 Pending test advances the clock past a drawing in microseconds):
@@ -42,6 +58,10 @@ Pending test advances the clock past a drawing in microseconds):
   up-to-date games skip the feed; feed failures are reported not thrown;
   era-invalid feed rows are skipped; jackpot info saves the estimate and
   stamps the stored draw.
+- **`CheckTicketResultShapeTests`** - matches ordered newest-first, game
+  isolation on the check side, Mega Millions bounds under the current 70/24
+  matrix with the "Mega Ball" name, and validation short-circuiting before
+  any data access.
 
 ### Use-case bounds (added by the 2026-07-28 audit)
 
@@ -68,7 +88,7 @@ The four use cases that had no test file now have one. All four guard a
   era already uses the new rules, and a clock set before any era began still
   yields one current era instead of throwing.
 
-## Lottery.Infrastructure.Tests (127)
+## Lottery.Infrastructure.Tests (136)
 
 Against a **real SQLite database** (temp file, migrated by DbUp per test class)
 - with Dapper the SQL is the logic, so mocking the connection would test
@@ -86,8 +106,13 @@ nothing:
   count), powerball.com's HTML response degrades to null instead of throwing,
   and money strings ("$1.5 Billion") parse correctly.
 - **`JackpotStoreTests`** - estimate round-trip and upsert on real SQLite.
+- **`DrawRepositoryEdgeTests`** - the SQL paths the base suite leaves open:
+  the null-bound halves of the range query's `(@from IS NULL OR ...)`
+  predicates, and the match query's inclusion rule - a special-only hit comes
+  back with zero whites, two whites without the special is filtered out
+  server-side, and games never cross.
 
-## Lottery.Api.Tests (66)
+## Lottery.Api.Tests (74)
 
 The API layer had no tests at all: `Program.cs`, `LotteryEndpoints.cs`,
 `DrawRefreshService.cs` and `DatabaseHealthCheck.cs` were covered only by the
@@ -124,6 +149,20 @@ and no clock:
   Startup gap-repair covers both games; one game's feed failing does not cost
   the other its refresh; a shutdown mid-wait completes rather than faults; and
   the loop wakes and refreshes again once the next drawing has passed.
+- **`RateLimitTests`** - a tiny-permit host (via `UseSetting`, because the
+  permit is read at startup registration): bursts beyond the permit get 429
+  while early requests succeed, attacker-*prepended* `X-Forwarded-For`
+  entries cannot split the partition (`ForwardLimit = 1` honors only the
+  platform-appended rightmost entry), and distinct real clients keep
+  independent budgets. Bursts are pigeonhole-sized so a fixed-window boundary
+  can never make them flaky.
+- **`CorsPolicyTests`** - config-driven CORS in both directions: a configured
+  origin is echoed back, an unconfigured one gets no allow header.
+- **`LotteryApiFactoryTests`** - the factory's own sentinel: the host must
+  write the factory's throwaway database file. The connection string is read
+  at startup registration - before test configuration is appended - so
+  without the factory's service-seam redirect the override silently loses to
+  the default path and every API test shares one file while staying green.
 
 ## Coverage
 

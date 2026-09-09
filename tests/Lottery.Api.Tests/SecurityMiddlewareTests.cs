@@ -103,3 +103,46 @@ public sealed class DevelopmentPipelineTests : IClassFixture<DevelopmentApiFacto
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 }
+
+/// <summary>
+/// CORS is config-driven: origins arrive from provisioning, and locally the
+/// list is empty. Origins are read while services are being registered, so
+/// the configured-origin case travels via UseSetting (host configuration)
+/// rather than the factory's in-memory settings, which are appended too late
+/// for startup-time reads.
+/// </summary>
+public sealed class CorsPolicyTests : IClassFixture<LotteryApiFactory>
+{
+    private readonly LotteryApiFactory _factory;
+
+    public CorsPolicyTests(LotteryApiFactory factory) => _factory = factory;
+
+    [Fact]
+    public async Task ConfiguredOrigin_IsEchoedBack()
+    {
+        using var client = _factory
+            .WithWebHostBuilder(builder => builder.UseSetting("Cors:AllowedOrigins:0", "https://lottery.example"))
+            .CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/powerball/rule-eras");
+        request.Headers.Add("Origin", "https://lottery.example");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("https://lottery.example",
+            Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
+    }
+
+    [Fact]
+    public async Task UnconfiguredOrigin_GetsNoAllowHeader()
+    {
+        using var client = _factory.CreateClient(); // no origins configured
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/powerball/rule-eras");
+        request.Headers.Add("Origin", "https://evil.example");
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.False(response.Headers.Contains("Access-Control-Allow-Origin"));
+    }
+}

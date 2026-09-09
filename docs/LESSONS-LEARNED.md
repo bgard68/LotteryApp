@@ -771,3 +771,110 @@ retry is describing itself, not you.
 ARM call that had been dropping connections began answering - and the deploy
 attempted immediately after succeeded. The recovering management plane was the
 tell that a retry had become worth one attempt; nothing on our side changed.
+
+## 30. The feed that promised to degrade gracefully threw instead
+
+**Symptom:** none in production - yet. Found while writing negative tests for
+the test-suite expansion: `MegaMillionsJackpotFeed`'s doc comment promises
+"any shape change degrades to null rather than throwing", but a non-XML body
+(a bot challenge or outage page - exactly what lesson 8 records happening to
+powerball.com) threw `XmlException` from the unguarded `XDocument.Parse`, and
+malformed JSON inside the XML wrapper threw `JsonException`. `RefreshGame`
+catches only `HttpRequestException`/`TaskCanceledException`/
+`InvalidOperationException`, so either exception escaped the
+jackpot-is-optional design: the background service logged a failed cycle, and
+`POST /internal/refresh` would have returned 500.
+
+**How found:** turning the documented contract into planted-input tests. A
+fixture serving an HTML page where XML was expected failed before any fix
+existed. The tell was **asymmetry among siblings**: the NY Lottery and
+powerball.com adapters both wrap their parsing in defensive catches; the Mega
+Millions adapter - the one whose source had never yet misbehaved - was the one
+of three without a guard.
+
+**Fix:** the parse is wrapped in a
+`when (ex is HttpRequestException or XmlException or JsonException)` filter
+returning null, with regression tests in `FeedParsingTests`
+(`MegaMillions_NonXmlBody_DegradesToNull`,
+`MegaMillions_BodyThatIsNotJson_DegradesToNull`) planting each malformed
+shape. Two parallel branches found and fixed this bug independently in the
+same week - converging on the same guard is decent evidence it is the right
+one.
+**Lesson:** a documented failure-mode promise is a test obligation - every
+input the doc claims to survive gets planted in a test, or the promise is
+prose. And when several adapters share a contract, diff them against each
+other: the guard two of them have and one lacks is a bug waiting for the
+third source to have a bad day.
+
+## 31. The test host's config overrides arrived after the app had already read them
+
+**Symptom:** 4 of the first 63 in-process API tests failed in ways that made
+no shared sense: the temp database file was never created (a stray
+`lottery.db` appeared in the test bin instead), the tiny-permit rate-limit
+host never returned a 429, and the configured CORS origin was never echoed -
+while the `Refresh:Key` guard tests, also driven by config overrides, passed.
+
+**Cause:** with minimal hosting, `WebApplicationFactory`'s
+`ConfigureAppConfiguration` sources are appended **after Program.cs's
+top-level statements have already executed** - so every value read during
+service registration (`GetValue` for the rate limit, `GetSection` for CORS,
+`GetConnectionString` inside `AddInfrastructure`) saw the defaults, while
+values read per-request through injected `IConfiguration` (`Refresh:Key`) saw
+the overrides. The pass/fail split between the two kinds of config tests was
+the diagnostic signature: an in-process host has **two configuration epochs**,
+registration-time and request-time.
+
+**Fix:** startup-read keys that no appsettings file defines travel via
+`UseSetting` (host configuration, present from the first read); the
+connection string - which `appsettings.Development.json` would out-rank in
+either mechanism - is redirected at the service seam instead
+(`RemoveAll<IDbConnectionFactory>` + the real `SqliteConnectionFactory` and
+`DatabaseInitializer` pointed at the temp file). A sentinel test
+(`LotteryApiFactoryTests`) asserts the API actually wrote the temp database.
+**Lesson:** when overriding test-host config, know which epoch each key is
+read in - and put a sentinel test on the override itself. A silently ignored
+override is the worst kind of green: these tests ran against a freshly seeded
+*default* database with identical data, so everything but four tests passed
+while testing the wrong thing.
+
+**Postscript: the same trap, found again at merge time.** A parallel branch
+built its own `WebApplicationFactory` for the same API in the same week, with
+the database override supplied purely through `ConfigureAppConfiguration` -
+and every one of its tests was green. After merging the two suites, a stray
+`lottery.db` in the test bin gave it away: that factory's override had been
+silently ignored all along, every test class had been sharing one
+default-path database, and the per-factory "throwaway file" cleanup was
+deleting a file that never existed. The service-seam redirect plus the
+sentinel test now guard the merged factory. Exactly as lesson 28 found in CI:
+knowing about a trap is not the same as having removed it from every place it
+exists - and a green suite is no evidence either way, which is what makes the
+sentinel worth its two lines.
+
+## 32. The spoofing test failed - and falsified the comment it was written from
+
+**Symptom:** a test written straight from the code comment - "the
+X-Forwarded-For header cannot be forged to dodge the rate limit" - failed:
+six requests each claiming a different forged address all returned 200 under
+a permit of two. The forged header was being honored, one partition per lie.
+
+**Cause:** clearing `KnownProxies`/`KnownIPNetworks` does not tighten trust -
+when **both lists are empty, ASP.NET skips the proxy trust check entirely**
+and accepts forwarded headers from any direct peer. The comment's safety
+claim actually rests on two other things combined: `ForwardLimit = 1` (only
+the rightmost entry is consumed) and the App Service front end appending the
+genuine client address as that rightmost entry. Behind the platform the
+invariant holds; hit directly (TestServer, or Kestrel exposed without a front
+end), the rightmost entry is attacker-controlled.
+
+**Fix:** no production change - the deployed topology always has the front
+end in the path. The tests now pin the real mechanism from both directions:
+varying attacker-*prepended* entries with a fixed rightmost entry must all
+land in one partition and trip the limit, and distinct rightmost entries get
+independent budgets. (Both use a pigeonhole burst - `2 x permit + 2` requests
+- so a fixed-window boundary crossing can never turn them flaky.)
+**Lesson:** a test that fails against your expectation can be the most
+valuable one in the batch - this one replaced a plausible-but-wrong mental
+model ("cleared list = trust no one") with the actual mechanism, which is now
+executable documentation. Verify what a security-relevant setting *does*, not
+what its shape suggests; and if a hardening claim lives only in a comment,
+it is unverified until a test tries to break it.
