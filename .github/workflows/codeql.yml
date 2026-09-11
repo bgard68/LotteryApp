@@ -23,6 +23,16 @@ on:
   schedule:
     - cron: "30 5 * * 1" # weekly, so alerts surface even when the repo is quiet
 
+  # On demand. The three triggers above all wait on something - a push, a pull
+  # request, or Monday - so when the tool status page reports this configuration
+  # as not enabled there is no way to ask it for an answer. The page reports on
+  # the workflow RUN behind the analyses, not the analyses themselves, so a
+  # repository whose runs have aged out warns while its scanning is perfectly
+  # healthy. This is how that gets corrected without waiting for a push.
+  #
+  # No paths-ignore, unlike `push`: asking by hand is a request for a full scan.
+  workflow_dispatch:
+
 permissions:
   contents: read
 
