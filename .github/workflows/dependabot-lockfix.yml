@@ -1,0 +1,146 @@
+name: Fix Dependabot lockfiles
+
+# Dependabot regenerates packages.lock.json only for the projects whose .csproj it edits. Every
+# project that consumes the bumped package transitively keeps its old lock file, and locked-mode
+# restore (ci.yml's `dotnet restore --locked-mode`) fails the whole solution with NU1004 — the
+# pull request is born red, and rebasing cannot help because nothing about the base branch is
+# wrong. This workflow regenerates the missed lock files and pushes them, automatically.
+#
+# It needs no GitHub App and no stored secret — only the automatic GITHUB_TOKEN. Why this exact
+# shape (each piece is load-bearing):
+#
+#   workflow_run   The one Dependabot-compatible trigger that still gets a write-scoped
+#                  GITHUB_TOKEN. push/pull_request runs whose actor is dependabot[bot] are forced
+#                  read-only and secretless, and could not push the fix. workflow_run fires from
+#                  the default branch's copy of this file.
+#
+#   approval       A GITHUB_TOKEN push normally triggers no workflows, but GitHub makes an
+#                  exception for a pull request's `synchronize` event: every matching workflow is
+#                  created in the `action_required` state. Approving those runs starts the exact
+#                  branch-specific PR checks GitHub selected. Manually dispatching a hard-coded
+#                  subset is insufficient — omitted required checks stay "Expected" on the new
+#                  commit and the PR never satisfies branch protection.
+#
+#   termination    If an approved run fails again for a real reason, this workflow fires again,
+#                  finds the lock files already consistent, and stops without another push or
+#                  approval. No loop.
+#
+# Also dispatchable by hand: Actions -> Fix Dependabot lockfiles -> Run workflow -> branch name.
+
+on:
+  workflow_run:
+    workflows:
+      - "CI"       # ci.yml     -> required check "Backend build, tests, live smoke test"
+      - "CodeQL"   # codeql.yml -> required check "Analyze (csharp)"
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "dependabot/nuget/... branch to fix"
+        required: true
+        type: string
+
+permissions:
+  contents: write  # pushes the regenerated lock files to the Dependabot branch
+  actions: write   # approves the PR checks GitHub queues after the bot push
+
+concurrency:
+  group: dependabot-lockfix-${{ github.event.workflow_run.head_branch || inputs.branch }}
+  cancel-in-progress: false
+
+jobs:
+  fix:
+    # React only to failed runs on Dependabot's nuget branches: npm bumps have a single root lock
+    # file Dependabot regenerates correctly, and github-actions bumps have no lock file at all.
+    # Manual mode trusts the operator.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' &&
+       startsWith(github.event.workflow_run.head_branch, 'dependabot/nuget/'))
+    name: Regenerate lock files
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      BRANCH: ${{ github.event.workflow_run.head_branch || inputs.branch }}
+
+    steps:
+      # persist-credentials is deliberately TRUE here, unlike a normal build: this job exists to
+      # push, and the credential it persists is the job-scoped GITHUB_TOKEN.
+      - name: Checkout the Dependabot branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BRANCH }}
+          persist-credentials: true
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      # RestoreLockedMode is intentionally NOT set here: rewriting the lock files is the point.
+      - name: Regenerate every packages.lock.json
+        run: dotnet restore --force-evaluate
+
+      - name: Push the fix if anything changed
+        id: fix
+        run: |
+          if git diff --quiet -- '*packages.lock.json'; then
+            echo "::notice::Lock files already consistent with the project graph - nothing to fix."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- '*packages.lock.json'
+          git commit -m "ci: regenerate packages.lock.json for the projects Dependabot missed"
+          git push origin "HEAD:$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Approve the pull-request checks on the fixed commit
+        if: steps.fix.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(git rev-parse HEAD)
+          approved=0
+          idle_polls=0
+
+          # The synchronize event and its approval-required runs are created asynchronously.
+          # Approve every PR run for this exact commit, then wait for three empty polls so a
+          # slower workflow is not left behind. The one-minute ceiling keeps a platform failure
+          # loud instead of hanging this repair job indefinitely.
+          for ((attempt = 0; attempt < 20; attempt++)); do
+            runs=$(
+              gh api \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head&event=pull_request&per_page=100" \
+                --jq '.workflow_runs[] | select(.conclusion == "action_required") | .id'
+            )
+
+            if [ -z "$runs" ]; then
+              if [ "$approved" -gt 0 ]; then
+                idle_polls=$((idle_polls + 1))
+                if [ "$idle_polls" -ge 3 ]; then
+                  break
+                fi
+              fi
+            else
+              idle_polls=0
+              while read -r run_id; do
+                gh api --method POST \
+                  -H "X-GitHub-Api-Version: 2022-11-28" \
+                  "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/approve"
+                approved=$((approved + 1))
+              done <<< "$runs"
+            fi
+
+            sleep 3
+          done
+
+          if [ "$approved" -eq 0 ]; then
+            echo "::error::No approval-required pull-request runs appeared for $head."
+            exit 1
+          fi
+
+          echo "::notice::Approved $approved pull-request workflow run(s) for $head."
