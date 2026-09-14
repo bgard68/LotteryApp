@@ -45,8 +45,25 @@ jobs:
         id: meta
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
+      # Stay dormant until the App is configured, so merging this workflow before the
+      # one-time setup never adds a failing job. Ready only for nuget PRs with the
+      # App secret present.
+      - name: Is the lock-file sync configured?
+        id: gate
+        env:
+          APP_ID: ${{ secrets.DEPENDABOT_APP_ID }}
+        run: |
+          if [ "${{ steps.meta.outputs.package-ecosystem }}" = "nuget" ] && [ -n "$APP_ID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            if [ "${{ steps.meta.outputs.package-ecosystem }}" = "nuget" ]; then
+              echo "::notice::DEPENDABOT_APP_ID not set — skipping lock-file sync. See the workflow header for one-time setup."
+            fi
+          fi
+
       - name: Mint a short-lived App token
-        if: steps.meta.outputs.package-ecosystem == 'nuget'
+        if: steps.gate.outputs.ready == 'true'
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -54,20 +71,20 @@ jobs:
           private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
 
       - name: Check out the PR branch
-        if: steps.meta.outputs.package-ecosystem == 'nuget'
+        if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.head_ref }}
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Set up .NET
-        if: steps.meta.outputs.package-ecosystem == 'nuget'
+        if: steps.gate.outputs.ready == 'true'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
       - name: Regenerate and push lock files if they drifted
-        if: steps.meta.outputs.package-ecosystem == 'nuget'
+        if: steps.gate.outputs.ready == 'true'
         run: |
           set -euo pipefail
           dotnet restore --force-evaluate
