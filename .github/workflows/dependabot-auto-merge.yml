@@ -1,0 +1,40 @@
+name: Dependabot auto-merge
+
+# Turns on GitHub's native auto-merge for Dependabot pull requests, so a PR whose
+# every required status check passes merges itself instead of waiting for a human
+# to press the button. Branch protection still fully gates the merge — nothing lands
+# red, and required reviews (if any) are still enforced.
+#
+# Scope: minor and patch updates only. Major bumps are left open on purpose, so a
+# person looks at the changelog before they land.
+#
+# Requires "Allow auto-merge" to be enabled in Settings > General (it is for this
+# repo). Uses only the automatic GITHUB_TOKEN — no PAT or extra secrets.
+#
+# Note: this does not fix a red PR. LotteryApp restores in locked mode under Central
+# Package Management, so a Dependabot bump that leaves a packages.lock.json stale
+# fails with NU1004 and will sit here un-merged (correctly) until the lock files are
+# regenerated with `dotnet restore --force-evaluate`. Automating that step too needs
+# a separate workflow and a PAT — see the note in the PR that introduced this file.
+
+on: pull_request
+
+permissions:
+  contents: write        # enable auto-merge on the PR
+  pull-requests: write   # required by gh pr merge
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Enable auto-merge for non-major updates
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
