@@ -14,19 +14,25 @@ name: Dependabot auto-merge
 # Note: this does not fix a red PR. LotteryApp restores in locked mode under Central
 # Package Management, so a Dependabot bump that leaves a packages.lock.json stale
 # fails with NU1004 and will sit here un-merged (correctly) until the lock files are
-# regenerated with `dotnet restore --force-evaluate`. Automating that step too needs
-# a separate workflow and a PAT — see the note in the PR that introduced this file.
+# regenerated. dependabot-lockfile-sync.yml does that automatically, after which the
+# PR goes green and this workflow lands it.
 
 on: pull_request
 
+# Read-only by default; the one job that needs it grants itself the minimum below.
 permissions:
-  contents: write        # enable auto-merge on the PR
-  pull-requests: write   # required by gh pr merge
+  contents: read
 
 jobs:
   auto-merge:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Scoped to the job, not the workflow: enabling auto-merge is a pull-request
+    # write, and the merge itself is performed later by GitHub, so nothing here
+    # needs contents: write (least privilege).
+    permissions:
+      pull-requests: write
     steps:
       - name: Fetch Dependabot metadata
         id: meta
