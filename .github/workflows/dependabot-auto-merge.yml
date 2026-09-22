@@ -25,13 +25,23 @@ permissions:
 
 jobs:
   auto-merge:
-    if: github.actor == 'dependabot[bot]'
+    # The PR's author, not github.actor. github.actor is whoever caused this event,
+    # which stops being Dependabot as soon as dependabot-lockfile-sync.yml pushes the
+    # regenerated lock files: the synchronize run is attributed to github-actions[bot]
+    # and this job skips. That made the lock-file PRs — the ones that need the most
+    # help — the only ones auto-merge never touched.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Scoped to the job, not the workflow: enabling auto-merge is a pull-request
-    # write, and the merge itself is performed later by GitHub, so nothing here
-    # needs contents: write (least privilege).
+    # Scoped to the job, not the workflow, so the workflow default stays read-only.
+    #
+    # contents: write is required, not optional: `gh pr merge --auto` calls the
+    # enablePullRequestAutoMerge mutation, which GitHub gates on contents: write
+    # even though GitHub performs the merge itself later. Dropping it for
+    # least-privilege reasons (#158) made this job fail on every Dependabot PR
+    # with "Resource not accessible by integration", so nothing auto-merged at all.
     permissions:
+      contents: write
       pull-requests: write
     steps:
       - name: Fetch Dependabot metadata
