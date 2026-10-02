@@ -50,7 +50,31 @@ jobs:
 
       - name: Enable auto-merge for non-major updates
         if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          # GitHub refuses enablePullRequestAutoMerge while the pull request is momentarily
+          # UNSTABLE (other checks still settling) — and this job runs on `opened`, which is
+          # exactly that moment. Failing here made THIS job the red check that kept the PR
+          # unstable, a deadlock that stopped WidgetWorks #133 merging even though every real
+          # check passed.
+          #
+          # So: retry, and never fail the job. Arming auto-merge is all this step does; branch
+          # protection still decides what actually merges, and a warning stays visible without
+          # poisoning the pull request's status.
+          for attempt in 1 2 3 4 5; do
+            if out=$(gh pr merge --auto --squash "$PR_URL" 2>&1); then
+              echo "Auto-merge enabled."
+              exit 0
+            fi
+            case "$out" in
+              *"already enabled"*|*"Auto-merge is already enabled"*)
+                echo "Auto-merge already enabled."
+                exit 0
+                ;;
+            esac
+            echo "Attempt $attempt did not take: $out"
+            sleep 15
+          done
+          echo "::warning title=Auto-merge not armed::$out"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
