@@ -878,3 +878,31 @@ model ("cleared list = trust no one") with the actual mechanism, which is now
 executable documentation. Verify what a security-relevant setting *does*, not
 what its shape suggests; and if a hardening claim lives only in a comment,
 it is unverified until a test tries to break it.
+
+## 33. The audit gate went red on main, and every PR inherited the failure
+
+**Found:** a workflow-only pull request (#168, a CI fix touching nothing but
+`dependabot-auto-merge.yml`) failed `Angular build + specs`. A change that
+cannot affect the Angular build failing the Angular build is the tell that
+the failure belongs to the base branch, not the PR — the same shape as the
+container-scan outages in ToDoApp, arriving through a different gate.
+
+**Cause:** `npm audit --audit-level=moderate` runs as a build step in
+`lottery-web`, and two high-severity advisories had been published upstream
+against the committed lock file since the last green run: `brace-expansion`
+(three DoS advisories — quadratic expansion and uncontrolled recursion:
+GHSA-q2hr-2g5m-vwhr, GHSA-qhr7-859c-m2p7, GHSA-6j4f-fj2g-mc7p) and
+`engine.io` (Socket.IO protocol-revision-mismatch DoS: GHSA-2gc4-cqfq-p2gv).
+Nothing in the repository changed; the world did. An audit gate pinned to a
+lock file goes red on its own schedule, and from that moment every pull
+request fails a check it did not cause and cannot clear.
+
+**Fix:** `npm audit fix` in `lottery-web` — both had non-major fixes
+available — committed as its own PR (#169, lock file only, 0 vulnerabilities
+after). The blocked PR went green on rebase with no further change.
+
+**Lesson:** when a PR fails a check it cannot have influenced, check the
+base branch before reading one line of the diff — the failure was never
+yours to debug. And an advisory-driven gate needs the fix landed as its own
+smallest possible change, so every queued PR unblocks by rebase instead of
+each one absorbing an unrelated lock-file edit.
