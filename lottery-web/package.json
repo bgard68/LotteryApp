@@ -37,7 +37,7 @@
     "@angular/build": "^22.2.1",
     "@angular/cli": "^22.2.1",
     "@angular/compiler-cli": "^22.2.1",
-    "@types/jasmine": "~6.0.0",
+    "@types/jasmine": "~7.0.0",
     "istanbul-lib-instrument": "^6.0.3",
     "jasmine-core": "~5.13.0",
     "karma": "~6.4.0",
