@@ -220,4 +220,66 @@ public class SocrataFeedTests
 
         Assert.IsType<FormatException>(ex.InnerException);
     }
+    /// <summary>
+    /// The feed publishes partial rows in the minutes after a drawing. A
+    /// Powerball row short of its sixth number used to pass the `[..5]` slice
+    /// and throw IndexOutOfRangeException on `[5]` - which is not an
+    /// ArgumentException, so it escaped this class's own conversion and then
+    /// RefreshGame's filter, aborting the refresh before the jackpot step
+    /// instead of being reported as a feed error.
+    /// </summary>
+    [Fact]
+    public async Task PowerballRowMissingTheSixthNumber_IsReportedAsAnUnusablePayload()
+    {
+        var feed = Feed(new StubHandler(
+            """[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33 51 64"}]"""));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None));
+
+        // Names the shape rather than the symptom: "carries 5, expected 6" is
+        // what tells an operator the feed published early, where a generic
+        // "unusable payload" would send them looking for a parser bug.
+        Assert.Contains("carries 5 number(s), expected 6", ex.Message, StringComparison.Ordinal);
+    }
+
+    // The same row shape the other way round: extra numbers are no more usable
+    // than missing ones, and silently taking the first six would store a draw
+    // nobody drew.
+    [Fact]
+    public async Task PowerballRowWithTooManyNumbers_IsAlsoRefused()
+    {
+        var feed = Feed(new StubHandler(
+            """[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33 51 64 18 22"}]"""));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task MegaMillionsRowShortOfFiveWhites_IsRefused()
+    {
+        var feed = Feed(new StubHandler(
+            """[{"draw_date":"2026-07-24T00:00:00.000","winning_numbers":"02 05 42 44","mega_ball":"01"}]"""));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            feed.GetDrawsAfterAsync(Game.MegaMillions, new DateOnly(2026, 7, 23), CancellationToken.None));
+    }
+
+    // The batch is refused whole rather than delivered short: one unusable row
+    // must not let the good rows through, or a gap-repair silently skips a draw
+    // and the ledger never notices it is missing.
+    [Fact]
+    public async Task OneUnusableRow_RefusesTheWholeBatch()
+    {
+        var feed = Feed(new StubHandler(
+            """
+            [{"draw_date":"2026-07-22T00:00:00.000","winning_numbers":"01 02 03 04 05 06"},
+             {"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33 51 64"}]
+            """));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None));
+    }
+
 }

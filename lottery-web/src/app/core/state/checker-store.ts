@@ -106,11 +106,29 @@ export class CheckerStore {
     return wins;
   });
 
+  /**
+   * Which game context in-flight work was started for.
+   *
+   * Bumped by every change of game, and compared before any awaited result is
+   * applied. The select that changes the game is not disabled while a check
+   * runs - deliberately, since waiting on ten requests to look at the other
+   * game would be worse - so results, picks and the era can all arrive after
+   * the context they were requested in has gone. Each of the three used to be
+   * applied anyway: Powerball matches under a Mega Millions heading, picks
+   * drawn from the wrong matrix, and an era whose bounds (69/26 against 70/24)
+   * then validated tickets for a game nobody was looking at.
+   *
+   * One counter rather than three, because the thing being cancelled is the
+   * context, not the request - any game change invalidates all of them.
+   */
+  private contextEpoch = 0;
+
   constructor() {
     void this.loadEra();
   }
 
   async setGame(game: Game): Promise<void> {
+    this.contextEpoch++;
     this.game.set(game);
     this.results.set(null);
     this.error.set(null);
@@ -152,8 +170,10 @@ export class CheckerStore {
   }
 
   async generate(): Promise<void> {
+    const epoch = this.contextEpoch;
     await this.run(async () => {
       const picks = await this.api.generate(this.game(), this.count());
+      if (epoch !== this.contextEpoch) return;
       this.tickets.set(picks.tickets.map((t) => ({ whites: [...t.whiteBalls], special: t.special, selected: true })));
       this.results.set(null);
     });
@@ -161,6 +181,7 @@ export class CheckerStore {
 
   async check(): Promise<void> {
     if (!this.canCheck()) return;
+    const epoch = this.contextEpoch;
     const game = this.game();
     const era = this.era();
     const tickets = this.tickets();
@@ -172,15 +193,21 @@ export class CheckerStore {
         isCheckable(t, era)
           ? this.api.check(game, t.whites as number[], t.special as number)
           : Promise.resolve<CheckResultDto | null>(null)));
+      if (epoch !== this.contextEpoch) return;
       this.results.set(results);
     });
   }
 
   private async loadEra(): Promise<void> {
+    const epoch = this.contextEpoch;
     try {
       const eras = await this.api.ruleEras(this.game());
+      if (epoch !== this.contextEpoch) return;
       this.era.set(eras.find((e) => e.isCurrent) ?? null);
     } catch {
+      // The failure belongs to the context it was requested in too: clearing
+      // the era here would wipe the one the newer load is about to set.
+      if (epoch !== this.contextEpoch) return;
       this.era.set(null);
     }
   }

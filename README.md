@@ -49,7 +49,7 @@ order matters, the background refresh, and what is actually provisioned in Azure
 - **[Application](src/Lottery.Application/README.md)** - use cases and the port interfaces (`IDrawRepository`, `IHistorySource`, ...) that Infrastructure implements.
 - **[Infrastructure](src/Lottery.Infrastructure/README.md)** - Dapper repositories, connection factories, DbUp migrations, history seeding.
 - **[Api](src/Lottery.Api/README.md)** - the composition root: minimal API endpoints, DI wiring, health checks, rate limiting.
-- **[Tests](tests/README.md)** - 378 tests across all layers, including an in-process API suite; [scripts](scripts/README.md) holds the PowerShell smoke test.
+- **[Tests](tests/README.md)** - 387 tests across all layers, including an in-process API suite; [scripts](scripts/README.md) holds the PowerShell smoke test.
 
 SOLID throughout: one reason to change per class (SRP), ports owned by the layer
 that uses them (DIP), new adapters instead of edited use cases (OCP), and no
@@ -342,7 +342,7 @@ pwsh scripts/smoke-test.ps1 -BaseUrl http://localhost:5000
 dotnet test
 ```
 
-378 tests, all layers - including DST-boundary schedule tests driven by
+387 tests, all layers - including DST-boundary schedule tests driven by
 `FakeTimeProvider`, an **era-coverage test** that validates all 4,493
 historical draws against the rule-era table, feed contract tests against
 recorded real payloads, and an **in-process API suite** that boots the real

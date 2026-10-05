@@ -3,7 +3,16 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CheckerStore } from './checker-store';
 import { FakeLotteryApi } from './fake-lottery-api';
-import { ApiUnreachableError, LotteryApi, RateLimitedError, TicketMatchDto } from '../ports/lottery-api';
+import {
+  ApiUnreachableError,
+  CheckResultDto,
+  GeneratedPicksDto,
+  LotteryApi,
+  RateLimitedError,
+  RuleEraDto,
+  TicketMatchDto,
+} from '../ports/lottery-api';
+import type { Game } from '../domain/game';
 
 describe('CheckerStore', () => {
   let store: CheckerStore;
@@ -324,6 +333,111 @@ describe('CheckerStore', () => {
       store.setWhite(0, 0, 8);
 
       expect(store.bigWins()).toEqual([]);
+    });
+  });
+
+  /*
+   * Results, picks and the era all arrive after an await, and the game select
+   * is not disabled while they are in flight - deliberately, since blocking a
+   * game switch behind ten requests would be worse. So each of them could be
+   * applied to a context that had already moved on: Powerball matches shown
+   * under a Mega Millions heading, picks drawn from the wrong matrix, and an
+   * era whose bounds then validated tickets for a game nobody was looking at.
+   */
+  describe('a game switch while a request is in flight', () => {
+    /** Holds answers open so the switch can happen mid-request. */
+    class DeferredApi extends FakeLotteryApi {
+      private pending: (() => void)[] = [];
+
+      /**
+       * @param order 'lifo' answers the newest request first, which is how the
+       * stale-wins case actually happens: the older request is still in flight
+       * and lands last, overwriting the newer answer. Releasing in order would
+       * let last-write-wins be right by accident and test nothing.
+       */
+      release(order: 'fifo' | 'lifo' = 'fifo'): void {
+        const waiting = order === 'lifo' ? [...this.pending].reverse() : this.pending;
+        this.pending = [];
+        waiting.forEach((r) => r());
+      }
+
+      override check(game: Game, whites: number[], special: number): Promise<CheckResultDto> {
+        return new Promise((resolve) => {
+          this.pending.push(() => resolve(super.check(game, whites, special)));
+        });
+      }
+
+      override generate(game: Game, count: number): Promise<GeneratedPicksDto> {
+        return new Promise((resolve) => {
+          this.pending.push(() => resolve(super.generate(game, count)));
+        });
+      }
+
+      /** Per-game eras, so applying the wrong one is visible. */
+      override ruleEras(game: Game): Promise<RuleEraDto[]> {
+        return new Promise((resolve) => {
+          this.pending.push(() => resolve([
+            game === 'powerball'
+              ? { effectiveFrom: '2015-10-07', whiteBallMax: 69, whiteBallCount: 5, specialBallMax: 26, isCurrent: true }
+              : { effectiveFrom: '2025-04-08', whiteBallMax: 70, whiteBallCount: 5, specialBallMax: 24, isCurrent: true },
+          ]));
+        });
+      }
+    }
+
+    let deferred: DeferredApi;
+
+    beforeEach(async () => {
+      deferred = new DeferredApi();
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({
+        providers: [
+          provideZonelessChangeDetection(),
+          { provide: LotteryApi, useValue: deferred },
+        ],
+      });
+      store = TestBed.inject(CheckerStore);
+      deferred.release();          // settle the constructor's era load
+      await Promise.resolve();
+    });
+
+    it("does not show the previous game's check results", async () => {
+      fillTicket(0, [7, 19, 33, 51, 64], 18);
+      const checking = store.check();
+
+      // Started, not awaited: setGame waits on its own era load, so releasing
+      // has to happen while both are in flight. The epoch it bumps is set
+      // synchronously, which is what the check compares against on arrival.
+      const switching = store.setGame('megamillions');
+      deferred.release();
+      await Promise.all([checking, switching]);
+
+      // Powerball's answers must not land under Mega Millions.
+      expect(store.results()).toBeNull();
+    });
+
+    it("does not replace the tickets with the previous game's picks", async () => {
+      const generating = store.generate();
+
+      const switching = store.setGame('megamillions');
+      deferred.release();
+      await Promise.all([generating, switching]);
+
+      expect(store.tickets().every((t) => t.whites.every((w) => w === null))).toBe(true);
+    });
+
+    it('keeps the era of the game actually selected', async () => {
+      // Two switches with the first still in flight: the stale answer must not
+      // win just by resolving last.
+      const first = store.setGame('megamillions');
+      const second = store.setGame('powerball');
+      deferred.release('lifo');   // Powerball answers first, Mega Millions last
+      await Promise.all([first, second]);
+      await Promise.resolve();
+
+      expect(store.game()).toBe('powerball');
+      expect(store.era()?.whiteBallMax).toBe(69);
+      expect(store.era()?.specialBallMax).toBe(26);
     });
   });
 });

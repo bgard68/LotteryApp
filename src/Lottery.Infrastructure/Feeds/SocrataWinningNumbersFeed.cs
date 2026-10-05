@@ -53,18 +53,43 @@ public sealed class SocrataWinningNumbersFeed : IWinningNumbersFeed
         //
         // Rethrown as the type the caller does handle, keeping the cause: the
         // batch is still refused rather than silently delivered short.
-        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
+        // IndexOutOfRangeException is in the list because an array index is not
+        // an ArgumentException: a Powerball row carrying five numbers instead of
+        // six passed the `[..5]` slice and then threw on `[5]`, escaping both
+        // this filter and RefreshGame's. ToDraw now rejects that row by its
+        // length before indexing, so this arm is the backstop rather than the
+        // guard - kept so a future edit that reintroduces a bare index degrades
+        // to a reported feed error instead of breaking the promise above.
+        catch (Exception ex) when (ex is JsonException or FormatException
+            or ArgumentException or IndexOutOfRangeException)
         {
             throw new InvalidOperationException(
                 $"Socrata feed returned an unusable payload: {ex.Message}", ex);
         }
     }
 
+    /// <summary>How many numbers <c>winning_numbers</c> carries, per dataset.</summary>
+    private static int ExpectedNumbers(Game game) => game == Game.Powerball ? 6 : 5;
+
     private static Draw ToDraw(Game game, SocrataRow row)
     {
         var numbers = row.winning_numbers.Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Select(int.Parse)
             .ToArray();
+
+        // Checked before anything indexes it, and this is the point: the feed
+        // publishes partial rows in the minutes after a drawing, and a Powerball
+        // row short of its sixth number used to reach `numbers[5]` and throw
+        // IndexOutOfRangeException - which is not an ArgumentException, so it
+        // escaped the conversion below that exists for exactly this case. It
+        // then escaped RefreshGame's filter too, aborting the refresh before
+        // the jackpot step rather than being reported as a feed error.
+        //
+        // A length check converts the whole class at its source. The type of
+        // the exception stops being load-bearing.
+        if (numbers.Length != ExpectedNumbers(game))
+            throw new InvalidOperationException(
+                $"{game} row for {row.draw_date} carries {numbers.Length} number(s), expected {ExpectedNumbers(game)}.");
 
         // Powerball rows carry 6 numbers (last = special); Mega Millions rows
         // carry 5 whites with the Mega Ball in its own field.

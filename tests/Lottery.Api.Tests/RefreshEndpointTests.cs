@@ -10,19 +10,63 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 namespace Lottery.Api.Tests;
 
 /// <summary>
-/// /internal/refresh is the one endpoint that writes, and the only one with an
-/// access check. The check is opt-in - configuring no key leaves it open on
-/// purpose, for a single-host deployment where nothing else can reach it - so
-/// both configurations are pinned here rather than left to inspection.
+/// What the endpoint does when no key is configured at all.
+///
+/// This used to assert that it stood open, and said so on purpose: "configuring
+/// no key leaves it open, for a single-host deployment where nothing else can
+/// reach it". SECURITY-POSTURE F8 is what that reasoning cost - the key was set
+/// nowhere, so the deployed instance ran unauthenticated and anyone could drive
+/// feed fetches and database writes. Setting the key closed that instance and
+/// left the behaviour intact, which is one missing setting away from doing it
+/// again in any new environment.
+///
+/// So the matrix is now: closed everywhere that is not Development.
 /// </summary>
-public sealed class UnguardedRefreshTests : IClassFixture<LotteryApiFactory>
+public sealed class UnkeyedRefreshTests : IClassFixture<LotteryApiFactory>
 {
     private readonly HttpClient _client;
 
-    public UnguardedRefreshTests(LotteryApiFactory factory) => _client = factory.CreateClient();
+    public UnkeyedRefreshTests(LotteryApiFactory factory) => _client = factory.CreateClient();
 
     [Fact]
-    public async Task WithNoKeyConfigured_TheEndpointIsOpen()
+    public async Task WithNoKeyConfiguredInProduction_TheEndpointIsClosed()
+    {
+        var response = await _client.PostAsync("/internal/refresh", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    // Even an unauthorised POST must not be the one route that forgets them.
+    [Fact]
+    public async Task ARejectedUnkeyedCall_StillCarriesTheHardeningHeaders()
+    {
+        var response = await _client.PostAsync("/internal/refresh", null);
+
+        Assert.Equal("nosniff", Assert.Single(response.Headers.GetValues("X-Content-Type-Options")));
+    }
+
+    [Fact]
+    public async Task Refresh_IsPostOnly()
+    {
+        var response = await _client.GetAsync("/internal/refresh");
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+    }
+}
+
+/// <summary>
+/// Development with no key set: open, which is the only reason the fail-open
+/// behaviour was ever tempting. A clone has no secrets to configure, and
+/// nothing outside the machine can reach it.
+/// </summary>
+public sealed class UnkeyedDevelopmentRefreshTests : IClassFixture<DevelopmentApiFactory>
+{
+    private readonly HttpClient _client;
+
+    public UnkeyedDevelopmentRefreshTests(DevelopmentApiFactory factory) => _client = factory.CreateClient();
+
+    [Fact]
+    public async Task WithNoKeyConfiguredInDevelopment_TheEndpointStaysOpen()
     {
         var response = await _client.PostAsync("/internal/refresh", null);
 
@@ -49,14 +93,6 @@ public sealed class UnguardedRefreshTests : IClassFixture<LotteryApiFactory>
         Assert.Equal(OfflineJackpotFeed.EstimatedJackpot, next.GetProperty("estimatedJackpot").GetDecimal());
         Assert.Equal(OfflineJackpotFeed.CashValue, next.GetProperty("cashValue").GetDecimal());
         Assert.NotEqual(JsonValueKind.Null, next.GetProperty("jackpotUpdatedAtUtc").ValueKind);
-    }
-
-    [Fact]
-    public async Task Refresh_IsPostOnly()
-    {
-        var response = await _client.GetAsync("/internal/refresh");
-
-        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
     }
 }
 
@@ -109,6 +145,19 @@ public sealed class GuardedRefreshTests : IClassFixture<GuardedRefreshFactory>
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    // Length mismatch is the case a constant-time comparison has to answer
+    // rather than throw on - a truncated key must be a plain 401.
+    [Fact]
+    public async Task WithATruncatedKey_Is401()
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/internal/refresh");
+        request.Headers.Add("X-Refresh-Key", GuardedRefreshFactory.Key[..^1]);
+
+        var response = await _client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Fact]
     public async Task WithTheCorrectKey_TheRefreshRuns()
     {
@@ -145,6 +194,10 @@ public sealed class ExplodingFeedFactory : LotteryApiFactory
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // Keyed, because Production with no key configured is now closed. What
+        // this fixture is about is what happens *after* authorisation, so it
+        // carries the key rather than relying on the endpoint standing open.
+        Settings["Refresh:Key"] = GuardedRefreshFactory.Key;
         base.ConfigureWebHost(builder);
         builder.ConfigureServices(services =>
         {
@@ -158,7 +211,11 @@ public sealed class RefreshEndpointResilienceTests : IClassFixture<ExplodingFeed
 {
     private readonly HttpClient _client;
 
-    public RefreshEndpointResilienceTests(ExplodingFeedFactory factory) => _client = factory.CreateClient();
+    public RefreshEndpointResilienceTests(ExplodingFeedFactory factory)
+    {
+        _client = factory.CreateClient();
+        _client.DefaultRequestHeaders.Add("X-Refresh-Key", GuardedRefreshFactory.Key);
+    }
 
     [Fact]
     public async Task AnUnanticipatedFeedFailure_IsReported_NotA500()

@@ -906,3 +906,74 @@ base branch before reading one line of the diff — the failure was never
 yours to debug. And an advisory-driven gate needs the fix landed as its own
 smallest possible change, so every queued PR unblocks by rebase instead of
 each one absorbing an unrelated lock-file edit.
+
+## 34. A partial feed row threw the one exception type nobody listed
+
+`SocrataWinningNumbersFeed.ToDraw` read Powerball's special ball as
+`numbers[5]` after slicing `numbers[..5]`. The feed publishes partial rows in
+the minutes after a drawing - this file already carried a comment saying so -
+and a row short of its sixth number passes the slice and throws
+**`IndexOutOfRangeException`** on the index.
+
+That type is not an `ArgumentException`. It derives from `SystemException`, so
+it escaped this class's own catch filter (`JsonException or FormatException or
+ArgumentException`) - the filter that exists precisely to convert a short row
+into a reported feed error - and then escaped `RefreshGame`'s filter too,
+breaking that class's documented promise that *feed failures are reported,
+never thrown*. The refresh aborted before the jackpot step, so a partial row
+stopped the jackpot updating as well, and the error surfaced generically
+instead of naming the feed.
+
+**What makes it worth a numbered entry:** this is the third time a feed has
+thrown a type the filter did not match (see #30, and the `ArgumentException`
+note in the file itself). Twice the fix was to add the missing type to the
+list. The list is the wrong place to fix it - every entry is a guess about what
+the next payload will do.
+
+**Fix:** `ToDraw` now checks `numbers.Length` against what the dataset is
+supposed to carry *before* anything indexes it, and throws
+`InvalidOperationException` naming the shape: "carries 5 number(s), expected
+6." The exception type stops being load-bearing. `IndexOutOfRangeException` was
+added to the filter as well, explicitly as a backstop rather than the guard, so
+a future edit that reintroduces a bare index degrades instead of escaping.
+
+**How it was found:** not by reading the file - the comment above the bug reads
+as though the case is handled. It came from asking one question of every
+catch filter in the solution: *which exception types can this expression
+actually throw, and is each one in the list?* `numbers[5]` answers
+`IndexOutOfRangeException`, and the list did not say it.
+
+**Prevention:** four tests covering short, long, and mixed batches, three of
+which fail against the previous code. The fourth (a short Mega Millions row)
+passed before the fix and is kept as a guard rather than a regression test -
+it already worked, because `[..5]` throws `ArgumentOutOfRangeException`, which
+*is* an `ArgumentException`. That asymmetry is the whole bug in one sentence.
+
+## 35. Three ways to show one game's answers under the other game's heading
+
+The ticket checker's game `<select>` was never disabled, while Generate and
+Check both were. Switching games mid-request was therefore ordinary, and three
+separate awaited results were applied without checking whether the context they
+were requested in still existed:
+
+| Path | What landed |
+|---|---|
+| `check()` | Powerball matches set into `results` under a Mega Millions heading |
+| `generate()` | tickets replaced with picks drawn from the other game's matrix |
+| `loadEra()` | the wrong game's bounds - 69/26 against 70/24 - then validating tickets |
+
+`loadEra` was the quiet one. It had no guard of any kind, so two quick switches
+left whichever request answered *last* in charge, and that need not be the
+current game.
+
+**Fix:** one `contextEpoch` on the store, bumped by `setGame`, captured before
+each await and compared before anything is applied. One counter rather than
+three, because what is being cancelled is the context, not the request - any
+game change invalidates all of them. The select is also disabled while busy,
+but that is the courtesy; the epoch is the invariant, and it does not depend on
+a template keeping a binding.
+
+**Prevention:** three specs driving a deliberately deferred fake API. The era
+one releases its answers **newest-first**, because releasing them in order lets
+last-write-wins be correct by accident - the test would have passed against the
+unfixed store and proved nothing. All three fail without the epoch.

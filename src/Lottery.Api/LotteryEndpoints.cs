@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Lottery.Application.UseCases;
 using Lottery.Domain;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -147,14 +149,11 @@ public static class LotteryEndpoints
         // Optionally guarded by a shared key: set Refresh:Key in the environment
         // (never in a committed file) and callers send X-Refresh-Key.
         app.MapPost("/internal/refresh", async (HttpRequest request, RefreshGame refresh,
-            IConfiguration configuration, ILoggerFactory loggerFactory, CancellationToken ct) =>
+            IConfiguration configuration, IWebHostEnvironment environment,
+            ILoggerFactory loggerFactory, CancellationToken ct) =>
         {
-            var requiredKey = configuration["Refresh:Key"];
-            if (!string.IsNullOrEmpty(requiredKey)
-                && request.Headers["X-Refresh-Key"].ToString() != requiredKey)
-            {
+            if (!IsRefreshAuthorised(request, configuration, environment))
                 return Results.Unauthorized();
-            }
 
             var logger = loggerFactory.CreateLogger("Lottery.Api.Refresh");
             var results = new List<RefreshResult>();
@@ -196,6 +195,38 @@ public static class LotteryEndpoints
                 feedError = r.FeedError,
             }));
         });
+    }
+
+    /// <summary>
+    /// Whether this caller may trigger a refresh.
+    /// </summary>
+    /// <remarks>
+    /// Closed when no key is configured, and that is the fix rather than an
+    /// inconvenience. The guard used to be skipped entirely when
+    /// <c>Refresh:Key</c> was empty, which made authentication depend on a
+    /// configuration value being present rather than on code - and it shipped
+    /// that way: SECURITY-POSTURE F8 records the endpoint standing
+    /// unauthenticated in production, open to anyone who wanted to drive feed
+    /// fetches and database writes. Setting the key closed that instance; it
+    /// left every future environment one missing setting away from reopening
+    /// it, silently, with nothing to notice.
+    ///
+    /// Development is exempt so a clone still runs with no secrets to set up,
+    /// which is the only reason the fail-open behaviour was ever tempting.
+    /// </remarks>
+    private static bool IsRefreshAuthorised(
+        HttpRequest request, IConfiguration configuration, IWebHostEnvironment environment)
+    {
+        var requiredKey = configuration["Refresh:Key"];
+        if (string.IsNullOrEmpty(requiredKey))
+            return environment.IsDevelopment();
+
+        // Constant-time: the comparison runs on every call to a public endpoint
+        // with a shared secret, so it should not leak its progress through
+        // timing. FixedTimeEquals returns false for a length mismatch rather
+        // than throwing, which is the behaviour wanted for a wrong key.
+        var presented = Encoding.UTF8.GetBytes(request.Headers["X-Refresh-Key"].ToString());
+        return CryptographicOperations.FixedTimeEquals(presented, Encoding.UTF8.GetBytes(requiredKey));
     }
 
     private static bool TryParseGame(string value, out Game game)
