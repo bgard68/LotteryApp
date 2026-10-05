@@ -119,4 +119,39 @@ public class RuleEraTests
         Assert.Contains(violations, v => v.DrawDate == new DateOnly(2026, 7, 22));
         Assert.Contains(violations, v => v.DrawDate == new DateOnly(2026, 7, 20));
     }
+    /// <summary>
+    /// <see cref="RuleEras.ForDate"/> walks the whole table keeping the last
+    /// era whose EffectiveFrom is on or before the draw date, which is only the
+    /// right answer while the table is ascending per game. A comment says so;
+    /// nothing enforced it, and a reordering would silently validate tickets
+    /// and imported draws against the wrong matrix - 69/26 against 70/24 is a
+    /// difference no error message would ever mention.
+    /// </summary>
+    [Fact]
+    public void TheEraTable_IsAscendingByEffectiveFrom_WithinEachGame()
+    {
+        foreach (var game in Enum.GetValues<Game>())
+        {
+            var dates = RuleEras.All.Where(e => e.Game == game).Select(e => e.EffectiveFrom).ToArray();
+
+            Assert.NotEmpty(dates);
+            Assert.Equal(dates.OrderBy(d => d).ToArray(), dates);
+            Assert.Equal(dates.Distinct().Count(), dates.Length);
+        }
+    }
+
+    // The guard above is only meaningful if ForDate really does depend on the
+    // order: this pins the behaviour it protects.
+    [Fact]
+    public void ForDate_ReturnsTheLatestEraOnOrBeforeTheDrawDate()
+    {
+        var era = RuleEras.ForDate(Game.Powerball, new DateOnly(2015, 10, 7));
+        Assert.Equal(new DateOnly(2015, 10, 7), era.EffectiveFrom);
+        Assert.Equal(69, era.WhiteBallMax);
+
+        var dayBefore = RuleEras.ForDate(Game.Powerball, new DateOnly(2015, 10, 6));
+        Assert.Equal(new DateOnly(2012, 1, 15), dayBefore.EffectiveFrom);
+        Assert.Equal(59, dayBefore.WhiteBallMax);
+    }
+
 }

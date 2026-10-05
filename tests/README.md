@@ -1,6 +1,6 @@
 ﻿# Tests
 
-378 tests across four projects, one per layer. Run with `dotnet test`.
+387 tests across four projects, one per layer. Run with `dotnet test`.
 
 The PowerShell smoke test in [scripts](../scripts/README.md) adds **32 checks**
 against a real running API - every endpoint, the error conditions, the refresh

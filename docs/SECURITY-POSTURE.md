@@ -163,6 +163,24 @@ operation so the two cannot drift. The value was never printed or written to
 disk. Verified: an unauthenticated POST now returns **401**, and a manually
 dispatched keep-alive run succeeds, proving the secret matches end to end.
 
+**Follow-up - the fix above closed the instance, not the class.** Setting the
+key removed the exposure; it left the *code* unchanged, and the code skipped
+the guard entirely whenever `Refresh:Key` was empty. So authentication depended
+on a configuration value being present, with nothing to notice its absence - a
+new environment, a failed rotation or a recreated App Service and the endpoint
+is open again, silently, exactly as it was. The test suite made that worse by
+pinning the behaviour as intended: *"configuring no key leaves it open on
+purpose."*
+
+The guard now **fails closed outside Development**: no key configured means
+401, and Development stays open only so a clone runs with no secrets to set up.
+The comparison is `CryptographicOperations.FixedTimeEquals` rather than string
+equality - a shared secret checked on every request should not leak its
+progress through timing, and a length mismatch answers false instead of
+throwing. Pinned by `UnkeyedRefreshTests` (closed in Production),
+`UnkeyedDevelopmentRefreshTests` (open in Development) and a truncated-key
+case.
+
 ### F9 - The rate limiter was partitioning on the wrong IP address
 
 The limiter keyed on `context.Connection.RemoteIpAddress` with no

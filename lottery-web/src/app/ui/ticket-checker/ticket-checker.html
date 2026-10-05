@@ -6,7 +6,8 @@
     <div class="controls">
       <fieldset class="panel">
         <legend>Generate</legend>
-        <select [value]="store.game()" (change)="store.setGame($any($event.target).value)" aria-label="Game">
+        <select [value]="store.game()" (change)="store.setGame($any($event.target).value)"
+                [disabled]="store.busy()" aria-label="Game">
           @for (g of games; track g.game) {
             <option [value]="g.game">{{ g.name }}</option>
           }
