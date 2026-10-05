@@ -300,12 +300,34 @@ repointed at any time by its maintainer.
 
 **Fix:** pinned to a commit SHA on both branches.
 
-### D8 - 12 npm advisories, all dev-only (not fixed, deliberately)
+### D8 - 12 npm advisories, all dev-only (resolved by removing the chain)
 
-Production dependencies are clean; the affected packages are Angular's karma
-test tooling, which never reaches a browser. `npm audit fix --force` would
-rewrite the test runner to resolve advisories with no production exposure.
-Revisit when Angular updates the chain.
+Production dependencies were clean; the affected packages were Angular's karma
+test tooling, which never reaches a browser. `npm audit fix --force` would have
+rewritten the test runner to resolve advisories with no production exposure, so
+the decision was to wait - "revisit when Angular updates the chain."
+
+**Angular was never going to update the chain.** Karma was deprecated upstream
+in 2023 and is maintenance-only, which is both why the advisories kept arriving
+and why they stopped being fixable: the `braces` stack-exhaustion advisory
+(GHSA-vfj7-8cjw-p6xm) covers *every published version* of the package, and
+npm's only suggested remedy was `karma@4.0.0` - a major downgrade from the
+pinned `karma@6.4`. Waiting had become waiting for something that was not
+coming, and in the meantime the gate went red on every pull request, exactly
+as LESSONS-LEARNED 33 describes.
+
+**Fix:** migrated the specs to Vitest on `@angular/build:unit-test`, which
+Angular 22 supports natively. Karma, karma-jasmine, karma-coverage,
+karma-chrome-launcher, karma-jasmine-html-reporter, jasmine-core and
+@types/jasmine all left the tree with it. `npm audit` is **clean at moderate**,
+and the advisory class goes with the dependency rather than being suppressed.
+
+A stopgap was designed and rejected: an allowlist keyed by advisory id, with an
+expiry date and a check that fails when the exception is no longer needed. It
+would have worked, and it would have been four new things to maintain - a
+script, a JSON file, a gate probe and an entry here - in service of a test
+runner that should be deleted. Recorded because the next advisory in deprecated
+tooling will make the same offer.
 
 ### D9 - No rollback path (accepted)
 

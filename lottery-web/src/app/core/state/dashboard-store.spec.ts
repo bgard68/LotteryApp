@@ -1,3 +1,4 @@
+import { MockInstance, vi } from 'vitest';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { DashboardStore } from './dashboard-store';
@@ -32,11 +33,11 @@ describe('DashboardStore', () => {
   beforeEach(() => {
     api = new FakeLotteryApi();
     now = DRAW_MS - 3_600_000; // an hour before the drawing
-    jasmine.clock().install();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    jasmine.clock().uninstall();
+    vi.useRealTimers();
     TestBed.resetTestingModule();
   });
 
@@ -44,9 +45,9 @@ describe('DashboardStore', () => {
     const store = createStore();
 
     expect(store.cards().map((c) => c.meta.game)).toEqual(['powerball', 'megamillions']);
-    expect(store.cards().every((c) => !c.loaded)).toBeTrue();
-    expect(store.cards().every((c) => c.next === null && c.latest === null)).toBeTrue();
-    expect(store.cards().every((c) => c.countdown === null && c.error === null)).toBeTrue();
+    expect(store.cards().every((c) => !c.loaded)).toBe(true);
+    expect(store.cards().every((c) => c.next === null && c.latest === null)).toBe(true);
+    expect(store.cards().every((c) => c.countdown === null && c.error === null)).toBe(true);
   });
 
   it('fills each card with its own game once the API answers', async () => {
@@ -55,7 +56,7 @@ describe('DashboardStore', () => {
     await settle();
 
     const [powerball, megamillions] = store.cards();
-    expect(powerball.loaded).toBeTrue();
+    expect(powerball.loaded).toBe(true);
     expect(powerball.next?.game).toBe('powerball');
     expect(powerball.latest?.whiteBalls).toEqual([3, 4, 24, 36, 47]);
     expect(megamillions.next?.estimatedJackpot).toBe(800_000_000);
@@ -74,19 +75,19 @@ describe('DashboardStore', () => {
     await settle();
 
     now += 90_000;
-    jasmine.clock().tick(1000);
+    vi.advanceTimersByTime(1000);
 
     expect(store.cards()[0].countdown).toEqual({ days: 0, hours: 0, minutes: 58, seconds: 30 });
   });
 
   it('refetches after the drawing time so the card flips to Pending on its own', async () => {
     now = DRAW_MS - 5_000;
-    const nextDraw = spyOn(api, 'nextDraw').and.callThrough();
+    const nextDraw = vi.spyOn(api, 'nextDraw');
     createStore();
     await settle();
     expect(nextDraw).toHaveBeenCalledTimes(2); // one per game
 
-    jasmine.clock().tick(5_000 + 30_000 + 1);
+    vi.advanceTimersByTime(5_000 + 30_000 + 1);
     await settle();
 
     expect(nextDraw).toHaveBeenCalledTimes(4);
@@ -94,11 +95,11 @@ describe('DashboardStore', () => {
 
   it('does not schedule a refetch for a drawing that has already passed', async () => {
     now = DRAW_MS + 1;
-    const nextDraw = spyOn(api, 'nextDraw').and.callThrough();
+    const nextDraw = vi.spyOn(api, 'nextDraw');
     createStore();
     await settle();
 
-    jasmine.clock().tick(24 * 60 * 60 * 1000);
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
     await settle();
 
     expect(nextDraw).toHaveBeenCalledTimes(2);
@@ -106,7 +107,7 @@ describe('DashboardStore', () => {
 
   describe('when a game will not load', () => {
     async function failWith(error: Error): Promise<DashboardStore> {
-      spyOn(api, 'nextDraw').and.rejectWith(error);
+      vi.spyOn(api, 'nextDraw').mockRejectedValue(error);
       const store = createStore();
       await settle();
       return store;
@@ -116,7 +117,7 @@ describe('DashboardStore', () => {
       const store = await failWith(new Error('boom'));
 
       const card = store.cards()[0];
-      expect(card.loaded).toBeTrue();
+      expect(card.loaded).toBe(true);
       expect(card.error).toBe('Could not load drawing data.');
       expect(card.next).toBeNull();
       expect(card.latest).toBeNull();
@@ -139,7 +140,8 @@ describe('DashboardStore', () => {
       const store = await failWith(new ApiUnreachableError());
       expect(store.cards()[0].error).not.toBeNull();
 
-      (api.nextDraw as jasmine.Spy).and.callThrough();
+      // Undo the rejection the helper installed, so the next load really runs.
+      (api.nextDraw as unknown as MockInstance).mockRestore();
       await store.load('powerball');
 
       expect(store.cards()[0].error).toBeNull();
