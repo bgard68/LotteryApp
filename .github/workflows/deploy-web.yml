@@ -46,7 +46,8 @@ jobs:
         working-directory: lottery-web
         run: |
           npm ci
-          npx ng test --watch=false --browsers=ChromeHeadless
+          npx playwright install chromium
+          npx ng test --watch=false
           npx ng build
 
       # The free Static Web Apps SKU cannot proxy to a backend, so the browser

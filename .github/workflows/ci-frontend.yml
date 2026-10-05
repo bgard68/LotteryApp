@@ -46,8 +46,15 @@ jobs:
       - name: Audit npm dependencies
         run: npm audit --audit-level=moderate
 
-      - name: Specs (ChromeHeadless)
-        run: npx ng test --watch=false --browsers=ChromeHeadless
+      # Vitest drives a Playwright-managed Chromium rather than the runner's
+      # own Chrome, so the binary has to be fetched. --with-deps is omitted:
+      # the GitHub image already carries the shared libraries, and the flag
+      # costs an apt transaction on every run.
+      - name: Install the Playwright browser
+        run: npx playwright install chromium
+
+      - name: Specs (Vitest, headless Chromium)
+        run: npx ng test --watch=false
 
       - name: Production build
         run: npx ng build

@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { BrowserViewport, MOBILE_MAX_WIDTH, Viewport } from './viewport';
@@ -14,8 +15,10 @@ describe('BrowserViewport', () => {
   /** Stands in for the real MediaQueryList so the spec drives the breakpoint. */
   function stubMatchMedia(matches: boolean): void {
     queries = [];
-    fireChange = () => fail('nothing subscribed to the media query');
-    spyOn(window, 'matchMedia').and.callFake((query: string) => {
+    fireChange = () => {
+      throw new Error('nothing subscribed to the media query');
+    };
+    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => {
       queries.push(query);
       return {
         matches,
@@ -39,13 +42,13 @@ describe('BrowserViewport', () => {
   it('starts mobile when the app opens on a phone-sized screen', () => {
     stubMatchMedia(true);
 
-    expect(new BrowserViewport().isMobile()).toBeTrue();
+    expect(new BrowserViewport().isMobile()).toBe(true);
   });
 
   it('starts desktop when it does not', () => {
     stubMatchMedia(false);
 
-    expect(new BrowserViewport().isMobile()).toBeFalse();
+    expect(new BrowserViewport().isMobile()).toBe(false);
   });
 
   it('follows the query afterwards, so rotating a phone re-lays out', () => {
@@ -53,10 +56,10 @@ describe('BrowserViewport', () => {
     const viewport = new BrowserViewport();
 
     fireChange(true);
-    expect(viewport.isMobile()).toBeTrue();
+    expect(viewport.isMobile()).toBe(true);
 
     fireChange(false);
-    expect(viewport.isMobile()).toBeFalse();
+    expect(viewport.isMobile()).toBe(false);
   });
 
   // The guard is what keeps this class constructible off a real browser tab -
@@ -67,7 +70,7 @@ describe('BrowserViewport', () => {
     host.matchMedia = undefined;
 
     try {
-      expect(new BrowserViewport().isMobile()).toBeFalse();
+      expect(new BrowserViewport().isMobile()).toBe(false);
     } finally {
       host.matchMedia = real;
     }

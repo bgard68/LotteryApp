@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CheckerStore } from './checker-store';
@@ -31,7 +32,7 @@ describe('CheckerStore', () => {
 
   it('starts with a single empty ticket', () => {
     expect(store.count()).toBe(1);
-    expect(store.canCheck()).toBeFalse();
+    expect(store.canCheck()).toBe(false);
   });
 
   it('a check with nothing to check never reaches the API', async () => {
@@ -59,7 +60,7 @@ describe('CheckerStore', () => {
     fillTicket(1, [1, 2, 3, 4, 70], 5);
     expect(store.validationError()).toContain('Ticket 2');
     expect(store.validationError()).toContain('between 1 and 69');
-    expect(store.canCheck()).toBeFalse();
+    expect(store.canCheck()).toBe(false);
   });
 
   it('rejects an out-of-era special ball naming the ticket', () => {
@@ -68,7 +69,7 @@ describe('CheckerStore', () => {
     fillTicket(1, [1, 2, 3, 4, 5], 27); // the era's special ball stops at 26
     expect(store.validationError()).toContain('Ticket 2');
     expect(store.validationError()).toContain('special ball must be between 1 and 26');
-    expect(store.canCheck()).toBeFalse();
+    expect(store.canCheck()).toBe(false);
   });
 
   it('rejects duplicate whites', () => {
@@ -79,7 +80,7 @@ describe('CheckerStore', () => {
   it('stays quiet while tickets are incomplete', () => {
     store.setWhite(0, 0, 7);
     expect(store.validationError()).toBeNull();
-    expect(store.canCheck()).toBeFalse();
+    expect(store.canCheck()).toBe(false);
   });
 
   it('generate fills as many tickets as the count', async () => {
@@ -88,7 +89,7 @@ describe('CheckerStore', () => {
     expect(api.generateCalls).toEqual([{ game: 'powerball', count: 3 }]);
     expect(store.tickets().length).toBe(3);
     expect(store.tickets()[1].whites).toEqual([8, 19, 33, 51, 64]);
-    expect(store.canCheck()).toBeTrue();
+    expect(store.canCheck()).toBe(true);
   });
 
   it('check runs every ticket through the port and keeps results parallel', async () => {
@@ -116,7 +117,7 @@ describe('CheckerStore', () => {
     await store.check();
 
     expect(api.checkCalls.length).toBe(3);
-    expect(store.results()!.every((r) => r !== null)).toBeTrue();
+    expect(store.results()!.every((r) => r !== null)).toBe(true);
   });
 
   it('a checkmarked ticket only needs ITSELF complete; incomplete tickets are skipped', async () => {
@@ -124,7 +125,7 @@ describe('CheckerStore', () => {
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     // ticket 2 left empty and unchecked - checking must still be allowed
     store.toggleSelected(1);
-    expect(store.canCheck()).toBeTrue();
+    expect(store.canCheck()).toBe(true);
 
     await store.check();
 
@@ -140,7 +141,7 @@ describe('CheckerStore', () => {
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     fillTicket(1, [5, 5, 6, 7, 8], 9);
     store.toggleSelected(1);
-    expect(store.canCheck()).toBeTrue();
+    expect(store.canCheck()).toBe(true);
 
     await store.check();
 
@@ -157,20 +158,20 @@ describe('CheckerStore', () => {
     store.toggleSelected(0);
 
     expect(store.results()).not.toBeNull();
-    expect(store.isSelected(0)).toBeFalse();
-    expect(store.isSelected(1)).toBeTrue();
+    expect(store.isSelected(0)).toBe(false);
+    expect(store.isSelected(1)).toBe(true);
   });
 
   it('unchecking every ticket disables Check history', () => {
     fillTicket(0, [7, 19, 33, 51, 64], 18);
     store.toggleSelected(0);
-    expect(store.canCheck()).toBeFalse();
+    expect(store.canCheck()).toBe(false);
   });
 
   it('reports no selection for a ticket the count has since dropped', () => {
     store.setCount(3);
     store.setCount(1);
-    expect(store.isSelected(2)).toBeFalse();
+    expect(store.isSelected(2)).toBe(false);
   });
 
   it('pageSize defaults to 10 and accepts all', () => {
@@ -205,7 +206,7 @@ describe('CheckerStore', () => {
   describe('when the rule eras are unknown', () => {
     it('drops the old game\'s rules when the new game\'s lookup fails', async () => {
       expect(store.era()?.whiteBallMax).toBe(69);
-      spyOn(api, 'ruleEras').and.rejectWith(new ApiUnreachableError());
+      vi.spyOn(api, 'ruleEras').mockRejectedValue(new ApiUnreachableError());
 
       await store.setGame('megamillions');
 
@@ -213,7 +214,7 @@ describe('CheckerStore', () => {
     });
 
     it('treats an era list with no current era as unknown', async () => {
-      spyOn(api, 'ruleEras').and.resolveTo([
+      vi.spyOn(api, 'ruleEras').mockResolvedValue([
         { effectiveFrom: '2013-10-19', whiteBallMax: 59, whiteBallCount: 5, specialBallMax: 35, isCurrent: false },
       ]);
 
@@ -223,12 +224,12 @@ describe('CheckerStore', () => {
     });
 
     it('still lets the ticket be checked - the server has the last word', async () => {
-      spyOn(api, 'ruleEras').and.rejectWith(new ApiUnreachableError());
+      vi.spyOn(api, 'ruleEras').mockRejectedValue(new ApiUnreachableError());
       await store.setGame('megamillions');
 
       fillTicket(0, [1, 2, 3, 4, 99], 99); // impossible under any real era
       expect(store.validationError()).toBeNull();
-      expect(store.canCheck()).toBeTrue();
+      expect(store.canCheck()).toBe(true);
 
       await store.check();
 

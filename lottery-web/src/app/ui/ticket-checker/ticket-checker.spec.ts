@@ -137,13 +137,13 @@ describe('TicketChecker ticket entry', () => {
   }
 
   it('reads a hand-typed ticket into the store and unlocks the check', async () => {
-    expect(checkButton().disabled).toBeTrue();
+    expect(checkButton().disabled).toBe(true);
 
     await typeTicket(['7', '19', '33', '51', '64'], '18');
 
     expect(store.tickets()[0].whites).toEqual([7, 19, 33, 51, 64]);
     expect(store.tickets()[0].special).toBe(18);
-    expect(checkButton().disabled).toBeFalse();
+    expect(checkButton().disabled).toBe(false);
   });
 
   it('treats a cleared box as empty, never as zero', async () => {
@@ -153,7 +153,7 @@ describe('TicketChecker ticket entry', () => {
 
     expect(store.tickets()[0].whites[2]).toBeNull();
     expect(store.validationError()).toBeNull(); // incomplete, not invalid
-    expect(checkButton().disabled).toBeTrue();
+    expect(checkButton().disabled).toBe(true);
   });
 
   it('ignores a fractional entry rather than rounding it into a ball number', async () => {
@@ -168,7 +168,7 @@ describe('TicketChecker ticket entry', () => {
     await enter(special(), '');
 
     expect(store.tickets()[0].special).toBeNull();
-    expect(checkButton().disabled).toBeTrue();
+    expect(checkButton().disabled).toBe(true);
   });
 
   it('renders a row per ticket when more are asked for', async () => {

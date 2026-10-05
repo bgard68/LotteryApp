@@ -37,14 +37,11 @@
     "@angular/build": "^22.2.1",
     "@angular/cli": "^22.2.1",
     "@angular/compiler-cli": "^22.2.1",
-    "@types/jasmine": "~6.0.0",
+    "@vitest/browser-playwright": "^5.0.3",
     "istanbul-lib-instrument": "^6.0.3",
-    "jasmine-core": "~5.13.0",
-    "karma": "~6.4.0",
-    "karma-chrome-launcher": "~3.2.0",
-    "karma-coverage": "~2.2.0",
-    "karma-jasmine": "~5.1.0",
-    "karma-jasmine-html-reporter": "~2.3.0",
-    "typescript": "~6.0.0"
+    "jsdom": "^30.1.2",
+    "playwright": "^1.63.0",
+    "typescript": "~6.0.0",
+    "vitest": "^5.0.3"
   }
 }

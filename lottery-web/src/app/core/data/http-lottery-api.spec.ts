@@ -120,14 +120,14 @@ describe('HttpLotteryApi', () => {
       const promise = api.latest('powerball');
       http.expectOne((r) => r.url.startsWith('/api/')).flush('slow down', { status: 429, statusText: 'Too Many Requests' });
 
-      await expectAsync(promise).toBeRejectedWithError(RateLimitedError);
+      await expect(promise).rejects.toBeInstanceOf(RateLimitedError);
     });
 
     it('maps a dead backend to an unreachable error', async () => {
       const promise = api.latest('powerball');
       http.expectOne((r) => r.url.startsWith('/api/')).flush('', { status: 503, statusText: 'Service Unavailable' });
 
-      await expectAsync(promise).toBeRejectedWithError(ApiUnreachableError);
+      await expect(promise).rejects.toBeInstanceOf(ApiUnreachableError);
     });
 
     it('leaves a genuine server error alone', async () => {
@@ -135,7 +135,7 @@ describe('HttpLotteryApi', () => {
       http.expectOne((r) => r.url.startsWith('/api/'))
         .flush({ detail: 'boom' }, { status: 500, statusText: 'Server Error' });
 
-      await expectAsync(promise).toBeRejected();
+      await expect(promise).rejects.toThrow();
     });
   });
 });
