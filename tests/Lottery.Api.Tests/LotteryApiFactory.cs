@@ -98,8 +98,8 @@ public sealed class DevelopmentApiFactory : LotteryApiFactory
 /// <summary>A feed that is reachable and simply has nothing newer to report.</summary>
 public sealed class OfflineNumbersFeed : IWinningNumbersFeed
 {
-    public Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<Draw>>([]);
+    public Task<WinningNumbersResult> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
+        Task.FromResult(WinningNumbersResult.Ok([]));
 }
 
 /// <summary>A jackpot feed with a fixed estimate, so refresh has something to store.</summary>

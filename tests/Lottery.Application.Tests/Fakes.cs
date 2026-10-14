@@ -74,12 +74,20 @@ public sealed class FakeNumbersFeed(IReadOnlyList<Draw> draws) : Lottery.Applica
     public Exception? ThrowOnFetch { get; set; }
     public DateOnly? LastRequestedAfter { get; private set; }
 
-    public Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct)
+    /// <summary>Reported failure, as a real adapter now returns it.</summary>
+    public string? FailWith { get; set; }
+
+    public Task<Lottery.Application.Abstractions.WinningNumbersResult> GetDrawsAfterAsync(
+        Game game, DateOnly after, CancellationToken ct)
     {
         if (ThrowOnFetch is not null) throw ThrowOnFetch;
+        if (FailWith is not null)
+            return Task.FromResult(Lottery.Application.Abstractions.WinningNumbersResult.Unavailable(FailWith));
+
         LastRequestedAfter = after;
-        return Task.FromResult<IReadOnlyList<Draw>>(
-            draws.Where(d => d.Game == game && d.DrawDate > after).OrderBy(d => d.DrawDate).ToList());
+        IReadOnlyList<Draw> matching =
+            draws.Where(d => d.Game == game && d.DrawDate > after).OrderBy(d => d.DrawDate).ToList();
+        return Task.FromResult(Lottery.Application.Abstractions.WinningNumbersResult.Ok(matching));
     }
 }
 

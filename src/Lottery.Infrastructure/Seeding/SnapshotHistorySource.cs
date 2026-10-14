@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using Lottery.Application.Abstractions;
 using Lottery.Domain;
+using Lottery.Infrastructure.Feeds;
 
 namespace Lottery.Infrastructure.Seeding;
 
@@ -16,7 +17,7 @@ public sealed class SnapshotHistorySource : IHistorySource
 
     public Task<IReadOnlyList<Draw>> GetHistoryAsync(Game game, CancellationToken ct)
     {
-        var resource = game == Game.Powerball ? "powerball-history.json" : "megamillions-history.json";
+        var resource = GameFeedProfiles.For(game).SnapshotResource;
         var assembly = typeof(SnapshotHistorySource).Assembly;
         var fullName = assembly.GetManifestResourceNames()
             .Single(n => n.EndsWith(resource, StringComparison.Ordinal));

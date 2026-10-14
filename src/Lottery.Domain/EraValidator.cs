@@ -11,7 +11,15 @@ public static class EraValidator
 {
     public static EraViolation? Validate(Draw draw)
     {
-        var era = RuleEras.ForDate(draw.Game, draw.DrawDate);
+        // A date no era covers is a violation like any other, and reporting it as one is the
+        // point. This used to call RuleEras.ForDate, which THROWS for an uncovered date - so a
+        // validator whose job is to return violations signalled one kind of invalidity by
+        // throwing and the rest by returning. Callers had to both check the result and guard the
+        // call, and RefreshGame's catch filter carried ArgumentException solely for this: one
+        // bogus feed date escaped the method entirely and answered 500.
+        if (!RuleEras.TryForDate(draw.Game, draw.DrawDate, out var era))
+            return new EraViolation(draw.Game, draw.DrawDate,
+                $"No known {draw.Game} rule era covers {draw.DrawDate:yyyy-MM-dd}.");
 
         if (!draw.WhiteBalls.All(era.IsValidWhite))
             return new EraViolation(draw.Game, draw.DrawDate,

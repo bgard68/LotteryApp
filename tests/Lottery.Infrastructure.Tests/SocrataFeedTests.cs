@@ -1,7 +1,9 @@
 using System.Net;
+using Lottery.Application.Abstractions;
 using Lottery.Domain;
 using Lottery.Infrastructure.Feeds;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Lottery.Infrastructure.Tests;
 
@@ -21,6 +23,25 @@ public class SocrataFeedTests
 
     private static SocrataWinningNumbersFeed Feed(StubHandler handler, string? appToken = null) =>
         new(new HttpClient(handler), Config(appToken));
+
+    /// <summary>The adapter behind its fault-tolerance decorator - how it is registered.</summary>
+    private static IWinningNumbersFeed Tolerant(StubHandler handler) =>
+        new FaultTolerantWinningNumbersFeed(
+            Feed(handler), NullLogger<FaultTolerantWinningNumbersFeed>.Instance);
+
+    /// <summary>
+    /// Asserts the batch was refused and returns the reported reason. "Refused" means reported,
+    /// not thrown and not delivered short: both halves matter, so both are checked here.
+    /// </summary>
+    private static async Task<string> RefusalReason(IWinningNumbersFeed feed, Game game, DateOnly after)
+    {
+        var result = await feed.GetDrawsAfterAsync(game, after, CancellationToken.None);
+
+        Assert.False(result.Succeeded, "expected the batch to be refused");
+        Assert.Empty(result.Draws);
+        Assert.NotNull(result.Error);
+        return result.Error!;
+    }
 
     // Two real rows from resource/d6yy-54nr.json (Powerball).
     private const string PowerballRows =
@@ -42,8 +63,9 @@ public class SocrataFeedTests
 
         var draws = await feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None);
 
-        Assert.Equal(2, draws.Count);
-        var saturday = draws[1];
+        Assert.True(draws.Succeeded);
+        Assert.Equal(2, draws.Draws.Count);
+        var saturday = draws.Draws[1];
         Assert.Equal(Game.Powerball, saturday.Game);
         Assert.Equal(new DateOnly(2026, 7, 25), saturday.DrawDate);
         Assert.Equal([7, 19, 33, 51, 64], saturday.WhiteBalls);
@@ -60,7 +82,7 @@ public class SocrataFeedTests
 
         var draws = await feed.GetDrawsAfterAsync(Game.MegaMillions, new DateOnly(2026, 7, 23), CancellationToken.None);
 
-        var draw = Assert.Single(draws);
+        var draw = Assert.Single(draws.Draws);
         Assert.Equal(Game.MegaMillions, draw.Game);
         Assert.Equal(new DateOnly(2026, 7, 24), draw.DrawDate);
         Assert.Equal([2, 5, 42, 44, 60], draw.WhiteBalls);
@@ -127,7 +149,10 @@ public class SocrataFeedTests
     {
         var feed = Feed(new StubHandler("[]"));
 
-        Assert.Empty(await feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+        var result = await feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(result.Draws);
     }
 
     [Fact]
@@ -135,9 +160,9 @@ public class SocrataFeedTests
     {
         var feed = Feed(new StubHandler("null"));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
-        Assert.Contains("Socrata", ex.Message, StringComparison.Ordinal);
+        var reason = await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 25));
+
+        Assert.Contains("Socrata", reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,37 +171,38 @@ public class SocrataFeedTests
         var feed = Feed(new StubHandler(
             """[{"draw_date":"2026-07-24T00:00:00.000","winning_numbers":"02 05 42 44 60"}]"""));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => feed.GetDrawsAfterAsync(Game.MegaMillions, new DateOnly(2026, 7, 23), CancellationToken.None));
-        Assert.Contains("mega_ball", ex.Message, StringComparison.Ordinal);
+        var reason = await RefusalReason(feed, Game.MegaMillions, new DateOnly(2026, 7, 23));
+
+        Assert.Contains("special ball", reason, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ServerError_SurfacesAsHttpRequestException()
+    public async Task ServerError_IsReportedAsAFeedFailure()
     {
-        // RefreshGame catches this one and reports it as a feed error.
-        var feed = Feed(new StubHandler("rate limited", HttpStatusCode.TooManyRequests));
+        // The adapter lets the transport exception out; the decorator it is registered behind
+        // turns it into a reported failure. Asserted through the decorator because that pairing
+        // is what the Application layer is given - RefreshGame no longer catches by type.
+        var feed = Tolerant(new StubHandler("rate limited", HttpStatusCode.TooManyRequests));
 
-        await Assert.ThrowsAsync<HttpRequestException>(
-            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+        var reason = await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 25));
+
+        Assert.Contains(nameof(HttpRequestException), reason, StringComparison.Ordinal);
     }
 
-    // A bad row still refuses the whole batch - delivering a silently short
-    // batch would let gap-repair skip real draws. What it must NOT do is
-    // surface a type RefreshGame's catch filter misses, because that turns one
-    // malformed row into a 500 from /internal/refresh instead of a reported
-    // feed error. InvalidOperationException is the type that filter handles.
+    // A bad row still refuses the whole batch - delivering a silently short batch would let
+    // gap-repair skip real draws. What it must NOT do is reach the caller as an exception,
+    // because that is what turned one malformed row into a 500 from /internal/refresh. There is
+    // no longer a type to get right: failure is part of the return value.
 
     [Fact]
     public async Task MalformedJson_IsReportedAsAFeedError()
     {
-        var feed = Feed(new StubHandler("""[{"draw_date":"""));
+        var feed = Tolerant(new StubHandler("""[{"draw_date":"""));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+        var reason = await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 25));
 
-        // The cause is kept, so the log still says what was actually wrong.
-        Assert.IsAssignableFrom<System.Text.Json.JsonException>(ex.InnerException);
+        // The cause is named, so the log still says what was actually wrong.
+        Assert.Contains("JsonException", reason, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -187,8 +213,7 @@ public class SocrataFeedTests
     {
         var feed = Feed(new StubHandler(body));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+        await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 25));
     }
 
     [Theory]
@@ -203,10 +228,9 @@ public class SocrataFeedTests
     {
         var feed = Feed(new StubHandler(body));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 8, 24), CancellationToken.None));
+        var reason = await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 8, 24));
 
-        Assert.IsAssignableFrom<ArgumentException>(ex.InnerException);
+        Assert.Contains("five distinct balls", reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -215,10 +239,9 @@ public class SocrataFeedTests
         var feed = Feed(new StubHandler(
             """[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 XX 51 64 18"}]"""));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 25), CancellationToken.None));
+        var reason = await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 25));
 
-        Assert.IsType<FormatException>(ex.InnerException);
+        Assert.Contains("non-numeric ball", reason, StringComparison.Ordinal);
     }
     /// <summary>
     /// The feed publishes partial rows in the minutes after a drawing. A
@@ -234,13 +257,12 @@ public class SocrataFeedTests
         var feed = Feed(new StubHandler(
             """[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33 51 64"}]"""));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None));
+        var reason = await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 21));
 
         // Names the shape rather than the symptom: "carries 5, expected 6" is
         // what tells an operator the feed published early, where a generic
         // "unusable payload" would send them looking for a parser bug.
-        Assert.Contains("carries 5 number(s), expected 6", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("carries 5 number(s), expected 6", reason, StringComparison.Ordinal);
     }
 
     // The same row shape the other way round: extra numbers are no more usable
@@ -252,8 +274,7 @@ public class SocrataFeedTests
         var feed = Feed(new StubHandler(
             """[{"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33 51 64 18 22"}]"""));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None));
+        await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 21));
     }
 
     [Fact]
@@ -262,8 +283,7 @@ public class SocrataFeedTests
         var feed = Feed(new StubHandler(
             """[{"draw_date":"2026-07-24T00:00:00.000","winning_numbers":"02 05 42 44","mega_ball":"01"}]"""));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            feed.GetDrawsAfterAsync(Game.MegaMillions, new DateOnly(2026, 7, 23), CancellationToken.None));
+        await RefusalReason(feed, Game.MegaMillions, new DateOnly(2026, 7, 23));
     }
 
     // The batch is refused whole rather than delivered short: one unusable row
@@ -278,8 +298,7 @@ public class SocrataFeedTests
              {"draw_date":"2026-07-25T00:00:00.000","winning_numbers":"07 19 33 51 64"}]
             """));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            feed.GetDrawsAfterAsync(Game.Powerball, new DateOnly(2026, 7, 21), CancellationToken.None));
+        await RefusalReason(feed, Game.Powerball, new DateOnly(2026, 7, 21));
     }
 
 }

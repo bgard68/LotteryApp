@@ -56,7 +56,7 @@ public static class LotteryEndpoints
                 return Results.Ok(new
                 {
                     game = g.ToString(),
-                    status = result!.Status.ToString(),
+                    status = result.Status.ToString(),
                     drawDate = result.DrawDate,
                     whiteBalls = result.WhiteBalls,
                     special = result.Special,
@@ -229,30 +229,17 @@ public static class LotteryEndpoints
         return CryptographicOperations.FixedTimeEquals(presented, Encoding.UTF8.GetBytes(requiredKey));
     }
 
-    private static bool TryParseGame(string value, out Game game)
-    {
-        switch (value.ToLowerInvariant())
-        {
-            case "powerball":
-                game = Game.Powerball;
-                return true;
-            case "megamillions":
-            case "mega-millions":
-                game = Game.MegaMillions;
-                return true;
-            default:
-                game = default;
-                return false;
-        }
-    }
+    /// <summary>
+    /// Aliases and the "unknown game" message both come from <see cref="GameProfiles"/>, so a new
+    /// game cannot be routable but unlisted, or listed in the error text but unroutable - which a
+    /// hand-written switch plus a hard-coded "Use 'powerball' or 'megamillions'" string allowed.
+    /// </summary>
+    private static IResult NotAGame(string raw) =>
+        Results.NotFound(new { error = $"Unknown game '{raw}'. Use {GameProfiles.KnownSlugs}." });
 
     private static IResult WithGame(string raw, Func<Game, IResult> handler) =>
-        TryParseGame(raw, out var game)
-            ? handler(game)
-            : Results.NotFound(new { error = $"Unknown game '{raw}'. Use 'powerball' or 'megamillions'." });
+        GameProfiles.TryParse(raw, out var game) ? handler(game) : NotAGame(raw);
 
     private static async Task<IResult> WithGameAsync(string raw, Func<Game, Task<IResult>> handler) =>
-        TryParseGame(raw, out var game)
-            ? await handler(game)
-            : Results.NotFound(new { error = $"Unknown game '{raw}'. Use 'powerball' or 'megamillions'." });
+        GameProfiles.TryParse(raw, out var game) ? await handler(game) : NotAGame(raw);
 }

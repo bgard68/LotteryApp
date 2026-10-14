@@ -256,14 +256,28 @@ public class FeedParsingTests
     }
 
     [Fact]
-    public async Task NyLottery_RequestsThePerGameEndpoint()
+    public async Task NyLottery_RequestsThePowerballEndpoint()
     {
         var handler = new StubHandler(NyFixture);
         var feed = new NyLotteryJackpotFeed(new HttpClient(handler));
 
-        await feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None);
+        await feed.GetJackpotAsync(Lottery.Domain.Game.Powerball, CancellationToken.None);
 
-        Assert.Equal("https://nylottery.ny.gov/nyl-api/games/megamillions/draws", handler.LastUri!.ToString());
+        Assert.Equal("https://nylottery.ny.gov/nyl-api/games/powerball/draws", handler.LastUri!.ToString());
+    }
+
+    [Fact]
+    public async Task NyLottery_DeclinesOtherGames_WithoutCallingTheEndpoint()
+    {
+        // This source is the Powerball primary and serves nothing else. The slug used to be
+        // chosen by `game == Game.Powerball ? "powerball" : "megamillions"`, whose second half was
+        // unreachable - the composite sent Mega Millions straight to megamillions.com - so it was
+        // untested code that a third game would silently have been handed.
+        var handler = new StubHandler(NyFixture);
+        var feed = new NyLotteryJackpotFeed(new HttpClient(handler));
+
+        Assert.Null(await feed.GetJackpotAsync(Lottery.Domain.Game.MegaMillions, CancellationToken.None));
+        Assert.Equal(0, handler.Calls);
     }
 
     [Fact]

@@ -15,14 +15,24 @@ namespace Lottery.Infrastructure.Feeds;
 /// </summary>
 public sealed class NyLotteryJackpotFeed(HttpClient http) : IJackpotFeed
 {
+    private const string Slug = "powerball";
+
     public async Task<JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct)
     {
-        var slug = game == Game.Powerball ? "powerball" : "megamillions";
+        // Declines every other game, which is how the composite knows this source does not serve
+        // them - it asks each source in turn rather than routing by game itself.
+        //
+        // Powerball only, deliberately. The slug used to be
+        // `game == Game.Powerball ? "powerball" : "megamillions"`, and the Mega Millions half was
+        // unreachable: the composite sent Mega Millions straight to megamillions.com and never
+        // here. So it was untested code that a third game would have silently been handed.
+        if (game != Game.Powerball)
+            return null;
 
         string body;
         try
         {
-            body = await http.GetStringAsync($"https://nylottery.ny.gov/nyl-api/games/{slug}/draws", ct);
+            body = await http.GetStringAsync($"https://nylottery.ny.gov/nyl-api/games/{Slug}/draws", ct);
         }
         catch (HttpRequestException)
         {
@@ -62,7 +72,7 @@ public sealed class NyLotteryJackpotFeed(HttpClient http) : IJackpotFeed
             ?? upcoming.Jackpots?.FirstOrDefault();
 
         return new JackpotInfo(
-            game,
+            Game.Powerball,
             LastDrawDate: null,
             LastJackpot: null,
             LastJackpotWon: null,
