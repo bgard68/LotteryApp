@@ -17,6 +17,23 @@ public sealed record RefreshResult(
 /// Feed failures are reported, never thrown - a broken external source must not
 /// take the app down, and jackpot data is optional by design.
 /// </summary>
+/// <remarks>
+/// <para>
+/// That promise used to be kept by a <c>catch</c> filter listing the exception types the feeds
+/// were known to throw. It was broken three times by types nobody had listed, each time turning
+/// into a 500 from <c>/internal/refresh</c>. The feeds now report source problems in their return
+/// value (<see cref="WinningNumbersResult"/>), so this class makes the promise by <em>not
+/// catching anything</em> — there is no list left to be incomplete, and no exception type that
+/// could select the wrong branch.
+/// </para>
+/// <para>
+/// A second consequence of the old shape: the repository calls sat inside the same <c>try</c>, so
+/// a database failure during the write loop was reported to the caller as <c>FeedError</c> — a
+/// fault blamed on an innocent third party, and a 200 where a 500 belonged. Persistence now runs
+/// outside any failure handling, which is correct: a database that cannot accept a write is this
+/// system's problem and must surface as one.
+/// </para>
+/// </remarks>
 public sealed class RefreshGame(
     IDrawRepository draws,
     IWinningNumbersFeed numbersFeed,
@@ -36,10 +53,10 @@ public sealed class RefreshGame(
 
         if (behind)
         {
-            try
+            var fetched = await numbersFeed.GetDrawsAfterAsync(game, latest?.DrawDate ?? DateOnly.MinValue, ct);
+            if (fetched.Succeeded)
             {
-                var fetched = await numbersFeed.GetDrawsAfterAsync(game, latest?.DrawDate ?? DateOnly.MinValue, ct);
-                foreach (var draw in fetched)
+                foreach (var draw in fetched.Draws)
                 {
                     // Era-validate each live draw. Invalid rows are skipped, not
                     // stored - the weekly era-check run surfaces persistent skips.
@@ -53,17 +70,9 @@ public sealed class RefreshGame(
                         newDraws++;
                 }
             }
-            // ArgumentException included deliberately: EraValidator.Validate
-            // calls RuleEras.ForDate, which THROWS ArgumentOutOfRangeException
-            // for a draw dated before any known era rather than returning a
-            // violation. Without it a single bogus feed date escaped this
-            // method entirely, and /internal/refresh - which has no try/catch -
-            // answered 500. This class promises feed failures are reported,
-            // never thrown; a bad date is a feed failure like any other.
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException
-                or InvalidOperationException or ArgumentException)
+            else
             {
-                feedError = ex.Message;
+                feedError = fetched.Error;
             }
         }
 
@@ -75,18 +84,15 @@ public sealed class RefreshGame(
         return new RefreshResult(game, upToDate, newDraws, skipped, jackpotUpdated, feedError);
     }
 
+    /// <remarks>
+    /// No <c>try</c> here either: <see cref="IJackpotFeed"/> signals "no figure available" with a
+    /// null, and the adapters are wrapped so nothing escapes as an exception. The previous version
+    /// caught three types and returned false without logging, so a persistent jackpot-source
+    /// outage was indistinguishable from "no new amount" — silent by construction.
+    /// </remarks>
     private async Task<bool> RefreshJackpotAsync(Game game, CancellationToken ct)
     {
-        JackpotInfo? info;
-        try
-        {
-            info = await jackpotFeed.GetJackpotAsync(game, ct);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
-        {
-            return false;
-        }
-
+        var info = await jackpotFeed.GetJackpotAsync(game, ct);
         if (info is null)
             return false;
 

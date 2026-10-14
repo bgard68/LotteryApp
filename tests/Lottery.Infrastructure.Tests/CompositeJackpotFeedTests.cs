@@ -1,5 +1,6 @@
 using Lottery.Domain;
 using Lottery.Infrastructure.Feeds;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Lottery.Infrastructure.Tests;
 
@@ -34,10 +35,15 @@ public class CompositeJackpotFeedTests
         var mmHandler = new StubHandler(megaMillions);
 
         return new Harness(
+            // Registration ORDER is the routing policy now - each source declines the games it
+            // does not serve, and the composite takes the first that answers.
             new CompositeJackpotFeed(
-                new NyLotteryJackpotFeed(new HttpClient(nyHandler)),
-                new PowerballJackpotFeed(new HttpClient(pbHandler)),
-                new MegaMillionsJackpotFeed(new HttpClient(mmHandler))),
+                [
+                    new MegaMillionsJackpotFeed(new HttpClient(mmHandler)),
+                    new NyLotteryJackpotFeed(new HttpClient(nyHandler)),
+                    new PowerballJackpotFeed(new HttpClient(pbHandler)),
+                ],
+                NullLogger<CompositeJackpotFeed>.Instance),
             nyHandler, pbHandler, mmHandler);
     }
 

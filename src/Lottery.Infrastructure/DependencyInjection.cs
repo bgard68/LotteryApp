@@ -6,6 +6,7 @@ using Lottery.Infrastructure.Persistence;
 using Lottery.Infrastructure.Seeding;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Lottery.Infrastructure;
 
@@ -41,11 +42,32 @@ public static class DependencyInjection
         // (retry + circuit breaker + timeout). Registered transient - typed
         // clients must not be captured by singletons or handler rotation stops.
         services.AddHttpClient<SocrataWinningNumbersFeed>().AddStandardResilienceHandler();
-        services.AddTransient<IWinningNumbersFeed>(sp => sp.GetRequiredService<SocrataWinningNumbersFeed>());
         services.AddHttpClient<NyLotteryJackpotFeed>().AddStandardResilienceHandler();
         services.AddHttpClient<PowerballJackpotFeed>().AddStandardResilienceHandler();
         services.AddHttpClient<MegaMillionsJackpotFeed>().AddStandardResilienceHandler();
-        services.AddTransient<IJackpotFeed, CompositeJackpotFeed>();
+
+        // The port the Application sees is the adapter wrapped in the fault-tolerance decorator,
+        // so the "report, never throw" contract holds for whatever is inside - including the
+        // resilience pipeline's own BrokenCircuitException and TimeoutRejectedException, which no
+        // hand-written exception allowlist had ever named.
+        services.AddTransient<IWinningNumbersFeed>(sp => new FaultTolerantWinningNumbersFeed(
+            sp.GetRequiredService<SocrataWinningNumbersFeed>(),
+            sp.GetRequiredService<ILogger<FaultTolerantWinningNumbersFeed>>()));
+
+        // Jackpot sources in priority order; CompositeJackpotFeed asks each in turn and takes the
+        // first that answers. Each one declines the games it does not serve, so this ORDER is the
+        // whole routing policy: Mega Millions is served only by megamillions.com, and Powerball
+        // prefers the NY Lottery API with the retired powerball.com endpoint as a fallback.
+        // Adding a source means adding a line here.
+        services.AddTransient<IJackpotFeed>(sp => new FaultTolerantJackpotFeed(
+            new CompositeJackpotFeed(
+                [
+                    sp.GetRequiredService<MegaMillionsJackpotFeed>(),
+                    sp.GetRequiredService<NyLotteryJackpotFeed>(),
+                    sp.GetRequiredService<PowerballJackpotFeed>(),
+                ],
+                sp.GetRequiredService<ILogger<CompositeJackpotFeed>>()),
+            sp.GetRequiredService<ILogger<FaultTolerantJackpotFeed>>()));
 
         services.AddSingleton<GetNextDraw>();
         services.AddSingleton<GetLatestDraw>();

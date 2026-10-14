@@ -179,15 +179,16 @@ public sealed class GuardedRefreshTests : IClassFixture<GuardedRefreshFactory>
     }
 }
 
-/// <summary>A numbers feed that throws a type RefreshGame's catch filter does not
-/// match, for the game named. Stands in for a future escape of the kind that took
-/// /internal/refresh to 500 twice.</summary>
+/// <summary>A numbers feed that throws an exception type nobody anticipated, for the game named.
+/// Stands in for the escape that took /internal/refresh to 500 twice. RefreshGame no longer
+/// catches by type at all, so what this now proves is that an adapter which breaks its
+/// report-never-throw contract still cannot turn the endpoint into a 500.</summary>
 public sealed class ExplodingNumbersFeed : IWinningNumbersFeed
 {
-    public Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
+    public Task<WinningNumbersResult> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
         game == Game.Powerball
             ? throw new NotSupportedException("feed exploded")
-            : Task.FromResult<IReadOnlyList<Draw>>([]);
+            : Task.FromResult(WinningNumbersResult.Ok([]));
 }
 
 public sealed class ExplodingFeedFactory : LotteryApiFactory

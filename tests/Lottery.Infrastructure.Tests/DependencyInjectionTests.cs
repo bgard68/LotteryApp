@@ -79,13 +79,14 @@ public class DependencyInjectionTests
     [Fact]
     public void TheJackpotFeedIsTheCompositeOne()
     {
-        // The individual feeds are registered as typed HttpClients, but only the
-        // composite is bound to IJackpotFeed - resolving anything else would skip
-        // the Powerball fallback entirely.
+        // The individual feeds are registered as typed HttpClients; what the Application layer
+        // resolves is the composite wrapped in the fault-tolerance decorator. Both halves matter:
+        // without the composite the Powerball fallback is skipped, and without the decorator the
+        // report-never-throw contract is only as good as each adapter's own try/catch.
         using var provider = Build(Config());
 
-        Assert.IsType<CompositeJackpotFeed>(provider.GetRequiredService<IJackpotFeed>());
-        Assert.IsType<SocrataWinningNumbersFeed>(provider.GetRequiredService<IWinningNumbersFeed>());
+        Assert.IsType<FaultTolerantJackpotFeed>(provider.GetRequiredService<IJackpotFeed>());
+        Assert.IsType<FaultTolerantWinningNumbersFeed>(provider.GetRequiredService<IWinningNumbersFeed>());
     }
 
     [Fact]

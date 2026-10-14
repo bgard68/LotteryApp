@@ -173,8 +173,8 @@ public sealed class DrawRefreshServiceTests
                 game, new DateOnly(2099, 1, 1), [1, 2, 3, 4, 5], 6, null, null));
         }
 
-        public Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
-            Task.FromResult<IReadOnlyList<Draw>>([]);
+        public Task<WinningNumbersResult> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct) =>
+            Task.FromResult(WinningNumbersResult.Ok([]));
 
         public Task<JackpotInfo?> GetJackpotAsync(Game game, CancellationToken ct) =>
             Task.FromResult<JackpotInfo?>(null);

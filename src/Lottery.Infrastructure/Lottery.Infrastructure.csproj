@@ -13,6 +13,10 @@
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <!-- Security lift, not a direct dependency of this code: see Directory.Packages.props. The
+         reference has to exist for the version to win over the transitive one, and this is the
+         project that roots the chain, so it covers Api and the test projects too. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" />
   </ItemGroup>
   <ItemGroup>
     <!-- Migration scripts + seed snapshots ship inside the assembly so a

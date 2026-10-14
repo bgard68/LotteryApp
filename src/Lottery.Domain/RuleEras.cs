@@ -26,19 +26,38 @@ public static class RuleEras
         new(Game.MegaMillions, new DateOnly(2025, 4, 8), 70, 24),
     ];
 
-    /// <summary>The era in force for a game on a given draw date.</summary>
-    public static RuleEra ForDate(Game game, DateOnly drawDate)
+    /// <summary>
+    /// The era in force for a game on a given draw date, or false when none covers it.
+    /// </summary>
+    /// <remarks>
+    /// Selects the latest matching era by <c>EffectiveFrom</c> rather than by position. The
+    /// previous implementation walked <see cref="All"/> keeping the last match, which was correct
+    /// only while the table stayed sorted ascending per game — an invariant a comment asserted and
+    /// nothing enforced, so inserting a backfilled era in the wrong place would have silently
+    /// validated draws against the wrong matrix.
+    /// </remarks>
+    public static bool TryForDate(Game game, DateOnly drawDate, out RuleEra era)
     {
-        RuleEra? match = null;
-        foreach (var era in All)
+        RuleEra? best = null;
+        foreach (var candidate in All)
         {
-            if (era.Game == game && era.EffectiveFrom <= drawDate)
-                match = era; // list is ordered ascending by EffectiveFrom per game
+            if (candidate.Game != game || candidate.EffectiveFrom > drawDate)
+                continue;
+
+            if (best is null || candidate.EffectiveFrom > best.EffectiveFrom)
+                best = candidate;
         }
 
-        return match ?? throw new ArgumentOutOfRangeException(nameof(drawDate),
-            $"No known {game} rule era covers {drawDate:yyyy-MM-dd}.");
+        era = best!;
+        return best is not null;
     }
+
+    /// <summary>The era in force for a game on a given draw date.</summary>
+    public static RuleEra ForDate(Game game, DateOnly drawDate) =>
+        TryForDate(game, drawDate, out var era)
+            ? era
+            : throw new ArgumentOutOfRangeException(nameof(drawDate), drawDate,
+                $"No known {game} rule era covers {drawDate:yyyy-MM-dd}.");
 
     public static RuleEra Current(Game game, DateOnly today) => ForDate(game, today);
 }

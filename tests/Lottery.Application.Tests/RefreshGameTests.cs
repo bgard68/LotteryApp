@@ -105,8 +105,12 @@ public class RefreshGameTests
     [Fact]
     public async Task FeedFailure_IsReportedNotThrown()
     {
+        // The feed reports the failure in its result rather than throwing it, so this class has
+        // nothing to catch. An adapter that breaks that contract and throws anyway is handled by
+        // FaultTolerantWinningNumbersFeed, which it is registered behind - see
+        // FaultTolerantFeedsTests - and by the endpoint's backstop above that.
         var repo = RepoWith(Saturday);
-        var feed = new FakeNumbersFeed([Monday]) { ThrowOnFetch = new HttpRequestException("boom") };
+        var feed = new FakeNumbersFeed([Monday]) { FailWith = "boom" };
         var refresh = new RefreshGame(repo, feed, new FakeJackpotFeed(null), new FakeJackpotStore(), AfterMondayDraw);
 
         var result = await refresh.ExecuteAsync(Game.Powerball, CancellationToken.None);
@@ -154,12 +158,13 @@ public class RefreshGameTests
     [Fact]
     public async Task JackpotFeedFailure_CostsOnlyTheJackpot()
     {
-        // Jackpot data is optional by design: when that source throws, the
-        // winning numbers half of the cycle must still complete, and the failure
-        // must not be reported as a numbers-feed error either.
+        // Jackpot data is optional by design: when that source has nothing, the winning-numbers
+        // half of the cycle must still complete, and the absence must not be reported as a
+        // numbers-feed error either. A source that fails outright signals it the same way - with
+        // a null - because FaultTolerantJackpotFeed converts anything it throws.
         var repo = RepoWith(Saturday);
         var store = new FakeJackpotStore();
-        var jackpots = new FakeJackpotFeed(null) { ThrowOnFetch = new HttpRequestException("jackpot source down") };
+        var jackpots = new FakeJackpotFeed(null);
 
         var result = await new RefreshGame(repo, new FakeNumbersFeed([Monday]), jackpots, store, AfterMondayDraw)
             .ExecuteAsync(Game.Powerball, CancellationToken.None);
@@ -236,13 +241,14 @@ public class RefreshGameTests
     }
 
     [Fact]
-    public async Task ADrawDatedBeforeAnyKnownEra_IsReportedAsAFeedError_NotThrown()
+    public async Task ADrawDatedBeforeAnyKnownEra_IsSkippedAsInvalid_NotThrown()
     {
-        // EraValidator.Validate calls RuleEras.ForDate, which THROWS for a date
-        // no era covers rather than returning a violation. That exception used
-        // to escape ExecuteAsync entirely, and /internal/refresh - which has no
-        // try/catch of its own - answered 500. This class documents that feed
-        // failures are reported, never thrown.
+        // A date no era covers is now a violation EraValidator RETURNS, so the row is skipped
+        // like any other era-invalid draw instead of aborting the batch. Previously ForDate threw
+        // for it, the exception escaped ExecuteAsync entirely, and /internal/refresh answered 500;
+        // the catch filter that was added to contain it carried ArgumentException for this one
+        // case. Reporting it as a violation removes both the throw and the filter, and makes an
+        // uncovered date behave consistently with every other kind of invalid draw.
         var repo = new FakeDrawRepository();
         var stale = Draw.Create(Game.Powerball, new DateOnly(1980, 1, 5), [1, 2, 3, 4, 5], 6);
         var time = new FakeTimeProvider(new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.Zero));
@@ -252,8 +258,9 @@ public class RefreshGameTests
 
         var result = await refresh.ExecuteAsync(Game.Powerball, CancellationToken.None);
 
-        Assert.NotNull(result.FeedError);
+        Assert.Null(result.FeedError);
         Assert.Equal(0, result.NewDraws);
+        Assert.Equal(1, result.SkippedInvalid);
     }
 
     [Fact]

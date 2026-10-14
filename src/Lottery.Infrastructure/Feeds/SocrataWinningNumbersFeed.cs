@@ -10,11 +10,16 @@ namespace Lottery.Infrastructure.Feeds;
 /// snapshots were captured from, used for incremental refresh and gap-repair.
 /// The optional app token only raises rate limits; the API works without it.
 /// </summary>
+/// <remarks>
+/// Rows this adapter cannot make sense of are reported as
+/// <see cref="WinningNumbersResult.Unavailable"/>, not thrown and not silently dropped: the feed
+/// publishes partial rows in the minutes after a drawing, and a batch that is short a number is
+/// refused whole rather than delivered incomplete. Anything this method fails to anticipate is
+/// turned into the same outcome by <see cref="FaultTolerantWinningNumbersFeed"/>, so no payload
+/// can escape as an exception regardless of what it provokes here.
+/// </remarks>
 public sealed class SocrataWinningNumbersFeed : IWinningNumbersFeed
 {
-    private const string PowerballDataset = "d6yy-54nr";
-    private const string MegaMillionsDataset = "5xaw-6ayf";
-
     private readonly HttpClient _http;
 
     public SocrataWinningNumbersFeed(HttpClient http, IConfiguration configuration)
@@ -26,79 +31,98 @@ public sealed class SocrataWinningNumbersFeed : IWinningNumbersFeed
             _http.DefaultRequestHeaders.Add("X-App-Token", token);
     }
 
-    public async Task<IReadOnlyList<Draw>> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct)
+    public async Task<WinningNumbersResult> GetDrawsAfterAsync(Game game, DateOnly after, CancellationToken ct)
     {
-        var dataset = game == Game.Powerball ? PowerballDataset : MegaMillionsDataset;
+        var profile = GameFeedProfiles.For(game);
         var where = Uri.EscapeDataString($"draw_date > '{after:yyyy-MM-dd}T23:59:59'");
-        var url = $"resource/{dataset}.json?$where={where}&$order=draw_date&$limit=200";
+        var url = $"resource/{profile.SocrataDataset}.json?$where={where}&$order=draw_date&$limit=200";
 
-        try
-        {
-            using var stream = await _http.GetStreamAsync(url, ct);
-            var rows = await JsonSerializer.DeserializeAsync<List<SocrataRow>>(stream, JsonOptions, ct)
-                ?? throw new InvalidOperationException("Socrata feed returned null.");
+        using var stream = await _http.GetStreamAsync(url, ct);
+        var rows = await JsonSerializer.DeserializeAsync<List<SocrataRow>>(stream, JsonOptions, ct);
 
-            return rows.Select(r => ToDraw(game, r)).ToList();
-        }
-        // A malformed payload, or a row whose winning_numbers is short,
-        // non-numeric, or not five distinct balls, otherwise escapes as
-        // JsonException / FormatException / ArgumentException - none of which
-        // RefreshGame's catch filter matches, so one bad row 500s
-        // /internal/refresh rather than being reported as a feed error.
-        //
-        // ArgumentException rather than ArgumentOutOfRangeException: Draw.Create
-        // throws the BASE type for a row that is not five distinct balls, which
-        // is what the feed publishes in the minutes after a drawing. Catching
-        // only the derived type let exactly that case through.
-        //
-        // Rethrown as the type the caller does handle, keeping the cause: the
-        // batch is still refused rather than silently delivered short.
-        // IndexOutOfRangeException is in the list because an array index is not
-        // an ArgumentException: a Powerball row carrying five numbers instead of
-        // six passed the `[..5]` slice and then threw on `[5]`, escaping both
-        // this filter and RefreshGame's. ToDraw now rejects that row by its
-        // length before indexing, so this arm is the backstop rather than the
-        // guard - kept so a future edit that reintroduces a bare index degrades
-        // to a reported feed error instead of breaking the promise above.
-        catch (Exception ex) when (ex is JsonException or FormatException
-            or ArgumentException or IndexOutOfRangeException)
+        if (rows is null)
+            return WinningNumbersResult.Unavailable("Socrata feed returned null.");
+
+        var draws = new List<Draw>(rows.Count);
+        foreach (var row in rows)
         {
-            throw new InvalidOperationException(
-                $"Socrata feed returned an unusable payload: {ex.Message}", ex);
+            if (!TryReadDraw(game, profile, row, out var draw, out var reason))
+                return WinningNumbersResult.Unavailable($"Socrata feed returned an unusable payload: {reason}");
+
+            draws.Add(draw);
         }
+
+        return WinningNumbersResult.Ok(draws);
     }
 
-    /// <summary>How many numbers <c>winning_numbers</c> carries, per dataset.</summary>
-    private static int ExpectedNumbers(Game game) => game == Game.Powerball ? 6 : 5;
-
-    private static Draw ToDraw(Game game, SocrataRow row)
+    /// <summary>
+    /// Converts one row, or explains why it cannot be converted. Every field is checked before it
+    /// is used, so a malformed row produces a reason rather than an exception whose type the
+    /// caller would have to recognise.
+    /// </summary>
+    private static bool TryReadDraw(
+        Game game, GameFeedProfile profile, SocrataRow row, out Draw draw, out string reason)
     {
-        var numbers = row.winning_numbers.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(int.Parse)
-            .ToArray();
+        draw = null!;
 
-        // Checked before anything indexes it, and this is the point: the feed
-        // publishes partial rows in the minutes after a drawing, and a Powerball
-        // row short of its sixth number used to reach `numbers[5]` and throw
-        // IndexOutOfRangeException - which is not an ArgumentException, so it
-        // escaped the conversion below that exists for exactly this case. It
-        // then escaped RefreshGame's filter too, aborting the refresh before
-        // the jackpot step rather than being reported as a feed error.
-        //
-        // A length check converts the whole class at its source. The type of
-        // the exception stops being load-bearing.
-        if (numbers.Length != ExpectedNumbers(game))
-            throw new InvalidOperationException(
-                $"{game} row for {row.draw_date} carries {numbers.Length} number(s), expected {ExpectedNumbers(game)}.");
+        var tokens = row.winning_numbers.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var numbers = new int[tokens.Length];
+        for (var i = 0; i < tokens.Length; i++)
+        {
+            if (!int.TryParse(tokens[i], out numbers[i]))
+            {
+                reason = $"{game} row for {row.draw_date} carries non-numeric ball '{tokens[i]}'.";
+                return false;
+            }
+        }
 
-        // Powerball rows carry 6 numbers (last = special); Mega Millions rows
-        // carry 5 whites with the Mega Ball in its own field.
-        var (whites, special) = game == Game.Powerball
-            ? (numbers[..5], numbers[5])
-            : (numbers[..5], int.Parse(row.mega_ball
-                ?? throw new InvalidOperationException("Mega Millions row missing mega_ball.")));
+        // Checked before anything indexes it: the feed publishes partial rows in the minutes after
+        // a drawing, and a Powerball row short of its sixth number must be refused by its length
+        // rather than by whatever indexing it would throw.
+        if (numbers.Length != profile.WinningNumbersCount)
+        {
+            reason = $"{game} row for {row.draw_date} carries {numbers.Length} number(s), "
+                   + $"expected {profile.WinningNumbersCount}.";
+            return false;
+        }
 
-        return Draw.Create(game, DateOnly.Parse(row.draw_date.AsSpan(0, 10)), whites, special);
+        int special;
+        if (profile.SpecialIsLastWinningNumber)
+        {
+            special = numbers[^1];
+        }
+        else if (!int.TryParse(row.mega_ball, out special))
+        {
+            reason = $"{game} row for {row.draw_date} is missing or has a non-numeric special ball.";
+            return false;
+        }
+
+        var whites = numbers[..RuleEra.WhiteBallCount];
+
+        if (row.draw_date.Length < 10 || !DateOnly.TryParse(row.draw_date.AsSpan(0, 10), out var drawDate))
+        {
+            reason = $"{game} row has an unreadable draw_date '{row.draw_date}'.";
+            return false;
+        }
+
+        // The era table is the authority on what is a valid draw; ask it before Draw.Create, which
+        // signals the same refusal by throwing. A date no era covers is a feed problem too - it
+        // used to reach RuleEras.ForDate and escape as ArgumentOutOfRangeException.
+        if (!RuleEras.TryForDate(game, drawDate, out var era))
+        {
+            reason = $"no known {game} rule era covers {drawDate:yyyy-MM-dd}.";
+            return false;
+        }
+
+        if (!era.IsValidDraw(whites, special))
+        {
+            reason = $"{game} row for {drawDate:yyyy-MM-dd} is not five distinct balls valid for its era.";
+            return false;
+        }
+
+        draw = Draw.Create(game, drawDate, whites, special);
+        reason = "";
+        return true;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
