@@ -214,7 +214,7 @@ same adapter.
 npx ng test --watch=false --browsers=ChromeHeadless
 ```
 
-53 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
+108 specs: pure domain (countdown split/format/clamp, jackpot formatting incl.
 null-hides), CheckerStore against an in-memory `FakeLotteryApi` (era load,
 count clamping, per-ticket validation naming the offending ticket,
 checkbox-selection semantics - all-complete-tickets checked, view-filter
@@ -230,9 +230,10 @@ widens. No HTTP mocking anywhere - the port abstraction makes fakes trivial.
 
 ## Workflows
 
-`ci-frontend.yml` runs the specs, the production build and the OpenAPI drift
-check. `codeql.yml` analyzes JavaScript/TypeScript alongside C# in one matrix.
-`gitleaks.yml` and `dependency-review.yml` cover both halves.
+`ci-frontend.yml` runs the specs, the dependency rules (`npm run depcruise` -
+see [ARCHITECTURE.md](ARCHITECTURE.md)), the production build and the OpenAPI
+drift check. `codeql.yml` analyzes JavaScript/TypeScript alongside C# in one
+matrix. `gitleaks.yml` and `dependency-review.yml` cover both halves.
 
 **Deployment is automatic**: pushing changes under `lottery-web/**` builds,
 tests, writes `config.json` from the `API_BASE_URL` variable, and deploys to
