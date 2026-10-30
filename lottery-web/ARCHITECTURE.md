@@ -57,6 +57,12 @@ Nothing points outward. `ui` never sees HTTP, stores never see `HttpClient`, and
 `core/domain` never imports Angular at all - which is why its tests need no
 TestBed.
 
+Part of this is now held by machine rather than by review: `npm run depcruise`
+(dependency-cruiser, [`.dependency-cruiser.cjs`](.dependency-cruiser.cjs)) fails
+CI on an import cycle, on production code importing a spec or a `fake-*` test
+double, and on any import that does not resolve. The backend's equivalent is
+`ArchitectureTests` in `tests/Lottery.Api.Tests`.
+
 | Folder | Holds | Knows about |
 |---|---|---|
 | `core/domain` | `countdown.ts`, `money.ts`, `game.ts` | nothing - plain functions |

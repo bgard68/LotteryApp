@@ -56,6 +56,13 @@ jobs:
       - name: Specs (Vitest, headless Chromium)
         run: npx ng test --watch=false
 
+      # Architecture rules over the import graph (.dependency-cruiser.cjs):
+      # no cycles, no production import of spec files or fake-* test doubles,
+      # no unresolvable imports. The specs prove behaviour; this pins the
+      # shape ARCHITECTURE.md promises, and names both ends of any bad edge.
+      - name: Dependency rules (dependency-cruiser)
+        run: npm run depcruise
+
       - name: Production build
         run: npx ng build
 

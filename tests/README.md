@@ -1,6 +1,6 @@
 ﻿# Tests
 
-387 tests across four projects, one per layer. Run with `dotnet test`.
+420 tests across four projects, one per layer. Run with `dotnet test`.
 
 The PowerShell smoke test in [scripts](../scripts/README.md) adds **32 checks**
 against a real running API - every endpoint, the error conditions, the refresh
@@ -9,7 +9,7 @@ asserts the *absence* of the `Server` header).
 
 Back to the [main README](../../README.md).
 
-## Lottery.Domain.Tests (95)
+## Lottery.Domain.Tests (111)
 
 Pure logic, no mocks needed:
 
@@ -88,7 +88,7 @@ The four use cases that had no test file now have one. All four guard a
   era already uses the new rules, and a clock set before any era began still
   yields one current era instead of throwing.
 
-## Lottery.Infrastructure.Tests (136)
+## Lottery.Infrastructure.Tests (154)
 
 Against a **real SQLite database** (temp file, migrated by DbUp per test class)
 - with Dapper the SQL is the logic, so mocking the connection would test
@@ -112,7 +112,7 @@ nothing:
   back with zero whites, two whites without the special is filtered out
   server-side, and games never cross.
 
-## Lottery.Api.Tests (74)
+## Lottery.Api.Tests (82)
 
 The API layer had no tests at all: `Program.cs`, `LotteryEndpoints.cs`,
 `DrawRefreshService.cs` and `DatabaseHealthCheck.cs` were covered only by the
@@ -158,6 +158,16 @@ and no clock:
   can never make them flaky.
 - **`CorsPolicyTests`** - config-driven CORS in both directions: a configured
   origin is echoed back, an unconfigured one gets no allow header.
+- **`ArchitectureTests`** - the onion as executable rules (NetArchTest).
+  The csproj graph constrains assembly references; these read the compiled
+  assemblies and pin what the code actually touches: Domain depends on no
+  other layer and no persistence/web library (Dapper, DbUp, `Microsoft.Data`,
+  `System.Data`, `Microsoft.AspNetCore`), Application reaches only inward and
+  stays persistence-free (data access goes through its ports), Infrastructure
+  never references the Api. They live in this project because it is the only
+  one that can see all four assemblies, and failures name the offending types
+  rather than reporting "False is not True". The frontend's equivalent is
+  dependency-cruiser in `ci-frontend.yml`.
 - **`LotteryApiFactoryTests`** - the factory's own sentinel: the host must
   write the factory's throwaway database file. The connection string is read
   at startup registration - before test configuration is appended - so
