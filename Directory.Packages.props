@@ -22,7 +22,7 @@
          once Microsoft.Data.SqlClient ships a fixed dependency. -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
     <PackageVersion Include="Microsoft.OpenApi" Version="2.13.0" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.0" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="11.0.0" />
     <!-- Architecture rules as tests: reads assemblies via Mono.Cecil and asserts the
          dependency direction the layer docs promise. The eNhancedEdition fork is the
          maintained line of NetArchTest. -->
