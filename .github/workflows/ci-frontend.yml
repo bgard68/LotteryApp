@@ -35,6 +35,9 @@ jobs:
           cache: npm
           cache-dependency-path: lottery-web/package-lock.json
 
+      - name: Install npm 12
+        run: npm install --global npm@12.0.2
+
       - name: Install (locked)
         run: npm ci
 
